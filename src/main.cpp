@@ -57,65 +57,124 @@ using namespace std::string_view_literals;
 
 namespace fs = std::filesystem;
 
+std::wstring last_error_as_string(DWORD last_error);
 
-std::string GetLastErrorAsString(DWORD errorMessageID)
+bool is_user_admin()
 {
-    if(errorMessageID == 0)
-        return std::string(); //No error message has been recorded
+    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+    PSID AdministratorsGroup {};
 
-    LPSTR messageBuffer = nullptr;
-    size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | 
-                                 FORMAT_MESSAGE_FROM_SYSTEM | 
-                                 FORMAT_MESSAGE_IGNORE_INSERTS,
-                                 NULL, 
-                                 errorMessageID, 
-                                 MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), 
-                                 (LPSTR)&messageBuffer, 0, NULL);
+    BOOL success = AllocateAndInitializeSid(
+        &NtAuthority,
+        2,
+        SECURITY_BUILTIN_DOMAIN_RID,
+        DOMAIN_ALIAS_RID_ADMINS,
+        0, 0, 0, 0, 0, 0,
+        &AdministratorsGroup);
 
-    std::string message(messageBuffer, size);
+    if (not success)
+    {
+        FreeSid(AdministratorsGroup);
+        throw std::format(L"ERROR: Cannot allocate SID: {}", 
+                          last_error_as_string(GetLastError()));
+    }
 
-    //Free the buffer.
-    LocalFree(messageBuffer);
+    BOOL is_member = false;
 
-    return message;
+    success = CheckTokenMembership(NULL, AdministratorsGroup, &is_member);
+
+    if (not success)
+    {
+        FreeSid(AdministratorsGroup);
+        throw std::format(L"ERROR: CheckTokenMembership fasiled: {}", 
+                          last_error_as_string(GetLastError()));
+    }
+
+    FreeSid(AdministratorsGroup);
+
+    return (is_member > 0);
 }
 
-int main() 
+
+std::wstring last_error_as_string(DWORD last_error)
 {
-    auto constexpr adapter_count = 128;
-    IP_ADAPTER_ADDRESSES adapters[adapter_count] {};
-    ULONG outBufLen = sizeof(IP_ADAPTER_ADDRESSES) * adapter_count;
+    auto constexpr buffer_count = 1024;
+    WCHAR buffer[buffer_count] {};
 
-    auto res = GetAdaptersAddresses(
-        AF_INET,
-        GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS | GAA_FLAG_INCLUDE_ALL_INTERFACES,
+    DWORD size = FormatMessageW(
+        FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_IGNORE_INSERTS |
+        FORMAT_MESSAGE_MAX_WIDTH_MASK,
         NULL,
-        adapters,
-        &outBufLen);
-    if (res != NO_ERROR)
-    {
-        std::string message = GetLastErrorAsString(res);
-        int s = 0;
-    }
+        last_error,
+        0,
+        (wchar_t*)&buffer,
+        buffer_count,
+        NULL);
 
-    IP_ADAPTER_ADDRESSES* pAddresses = adapters;
+    return std::wstring(buffer, size);
+}
 
-    if (GetAdaptersAddresses(AF_UNSPEC, 0, NULL, pAddresses, &outBufLen) == NO_ERROR)
+int main()
+{
+    try
     {
-        while (pAddresses)
+        cout << "IsUserAdmin: " << is_user_admin() << endl;
+
+        throw std::wstring(L"yoooooooooooooo");
+
+        auto constexpr adapter_count = 128;
+        IP_ADAPTER_ADDRESSES adapters[adapter_count] {};
+        ULONG outBufLen = sizeof(IP_ADAPTER_ADDRESSES) * adapter_count;
+
+        auto res = GetAdaptersAddresses(
+            AF_INET,
+            GAA_FLAG_INCLUDE_PREFIX |
+            GAA_FLAG_INCLUDE_WINS_INFO |
+            GAA_FLAG_INCLUDE_GATEWAYS |
+            GAA_FLAG_INCLUDE_ALL_INTERFACES,
+            NULL,
+            adapters,
+            &outBufLen);
+
+        if (res != NO_ERROR)
         {
-            std::wcout << L"AdapterName: " << pAddresses->AdapterName << "\n";
-            std::wcout << L"FriendlyName: " << pAddresses->FriendlyName << "\n";
-            std::wcout << L"Ipv4Metric: " << pAddresses->Ipv4Metric << "\n";
-
-            std::wcout << L"DnsSuffix: " << pAddresses->DnsSuffix << "\n";
-            std::wcout << L"Description: " << pAddresses->Description << "\n\n";
-
-            pAddresses = pAddresses->Next;
+            //std::string message = GetLastErrorAsString(res);
+            int s = 0;
         }
+
+        IP_ADAPTER_ADDRESSES* pAddresses = adapters;
+
+        if (GetAdaptersAddresses(AF_UNSPEC, 0, NULL, pAddresses, &outBufLen) == NO_ERROR)
+        {
+            while (pAddresses)
+            {
+                std::wcout << L"AdapterName: " << pAddresses->AdapterName << "\n";
+                std::wcout << L"FriendlyName: " << pAddresses->FriendlyName << "\n";
+                std::wcout << L"Ipv4Metric: " << pAddresses->Ipv4Metric << "\n";
+
+                std::wcout << L"DnsSuffix: " << pAddresses->DnsSuffix << "\n";
+                std::wcout << L"Description: " << pAddresses->Description << "\n\n";
+
+                pAddresses = pAddresses->Next;
+            }
+        }
+        return 0;
+    }
+    catch (const std::wstring& e)
+    {
+        std::wcout << e << endl;
+    }
+    catch (str_cref e)
+    {
+        cout << e << endl;
+    }
+    catch (const std::exception& e)
+    {
+        cout << "[EXC] " << e.what() << endl;
     }
 
+    return 1;
 
-    return 0;
 }
 
