@@ -3,10 +3,12 @@
 // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 
 #include <winsock2.h>
+#include <windows.h>
+#include <ws2ipdef.h>
 #include <iphlpapi.h>
-#include <iostream>
 
 #pragma comment(lib, "IPHLPAPI.lib")
+
 
 #include <array>
 #include <assert.h>
@@ -39,6 +41,7 @@ using i32 = int32_t;
 using i64 = int64_t;
 
 using std::cout;
+using std::wcout;
 using std::endl;
 using std::string;
 using std::string_view;
@@ -56,45 +59,6 @@ using namespace std::string_literals;
 using namespace std::string_view_literals;
 
 namespace fs = std::filesystem;
-
-std::wstring last_error_as_string(DWORD last_error);
-
-bool is_user_admin()
-{
-    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
-    PSID AdministratorsGroup {};
-
-    BOOL success = AllocateAndInitializeSid(
-        &NtAuthority,
-        2,
-        SECURITY_BUILTIN_DOMAIN_RID,
-        DOMAIN_ALIAS_RID_ADMINS,
-        0, 0, 0, 0, 0, 0,
-        &AdministratorsGroup);
-
-    if (not success)
-    {
-        FreeSid(AdministratorsGroup);
-        throw std::format(L"ERROR: Cannot allocate SID: {}", 
-                          last_error_as_string(GetLastError()));
-    }
-
-    BOOL is_member = false;
-
-    success = CheckTokenMembership(NULL, AdministratorsGroup, &is_member);
-
-    if (not success)
-    {
-        FreeSid(AdministratorsGroup);
-        throw std::format(L"ERROR: CheckTokenMembership fasiled: {}", 
-                          last_error_as_string(GetLastError()));
-    }
-
-    FreeSid(AdministratorsGroup);
-
-    return (is_member > 0);
-}
-
 
 std::wstring last_error_as_string(DWORD last_error)
 {
@@ -115,55 +79,152 @@ std::wstring last_error_as_string(DWORD last_error)
     return std::wstring(buffer, size);
 }
 
-int main()
+bool is_user_admin()
+{
+    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+    PSID AdministratorsGroup {};
+
+    BOOL success = AllocateAndInitializeSid(
+        &NtAuthority,
+        2,
+        SECURITY_BUILTIN_DOMAIN_RID,
+        DOMAIN_ALIAS_RID_ADMINS,
+        0, 0, 0, 0, 0, 0,
+        &AdministratorsGroup);
+
+    if (not success)
+    {
+        FreeSid(AdministratorsGroup);
+        throw std::format(L"ERROR Cannot allocate SID: {}",
+                          last_error_as_string(GetLastError()));
+    }
+
+    BOOL is_member = false;
+
+    success = CheckTokenMembership(NULL, AdministratorsGroup, &is_member);
+
+    if (not success)
+    {
+        FreeSid(AdministratorsGroup);
+        throw std::format(L"ERROR CheckTokenMembership fasiled: {}",
+                          last_error_as_string(GetLastError()));
+    }
+
+    FreeSid(AdministratorsGroup);
+
+    return (is_member > 0);
+}
+
+
+
+int wmain(int argc, wchar_t* argv[])
 {
     try
     {
-        cout << "IsUserAdmin: " << is_user_admin() << endl;
+        //if (not is_user_admin())
+        //{
+        //    // Prompt the user with a UAC dialog for elevation
+        //    SHELLEXECUTEINFO shellExecuteInfo {};
+        //    shellExecuteInfo.cbSize = sizeof(SHELLEXECUTEINFO);
+        //    shellExecuteInfo.lpVerb = L"runas"; // Request elevation
+        //    shellExecuteInfo.lpFile = argv[0]; // Path to your application executable
+        //    shellExecuteInfo.lpParameters = L""; // Optional parameters for your application
+        //    shellExecuteInfo.nShow = SW_SHOWNORMAL;
 
-        throw std::wstring(L"yoooooooooooooo");
+        //    if (not ShellExecuteExW(&shellExecuteInfo))
+        //    {
+        //        wcout << L"ERROR cannot start app admin: " 
+        //            << last_error_as_string(GetLastError())
+        //            << endl;
+        //        return 1;
+        //    }
 
-        auto constexpr adapter_count = 128;
-        IP_ADAPTER_ADDRESSES adapters[adapter_count] {};
-        ULONG outBufLen = sizeof(IP_ADAPTER_ADDRESSES) * adapter_count;
+        //    return 0;
+        //}
 
-        auto res = GetAdaptersAddresses(
+
+
+        ULONG buffer_size = 0;
+        GetAdaptersAddresses(AF_INET, NULL, NULL, NULL, &buffer_size);
+        
+        void* mem = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size);
+        if (not mem)
+        {
+            throw std::format(L"ERROR cannot allocate memory!");
+        }
+
+        DWORD result = GetAdaptersAddresses(
             AF_INET,
-            GAA_FLAG_INCLUDE_PREFIX |
-            GAA_FLAG_INCLUDE_WINS_INFO |
-            GAA_FLAG_INCLUDE_GATEWAYS |
-            GAA_FLAG_INCLUDE_ALL_INTERFACES,
             NULL,
-            adapters,
-            &outBufLen);
+            NULL,
+            (IP_ADAPTER_ADDRESSES*)mem,
+            &buffer_size);
 
-        if (res != NO_ERROR)
+        if (result != NO_ERROR)
         {
-            //std::string message = GetLastErrorAsString(res);
-            int s = 0;
+            throw std::format(L"ERROR cannot get adapters addresses: {}",
+                              last_error_as_string(result));
         }
 
-        IP_ADAPTER_ADDRESSES* pAddresses = adapters;
+        IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem;
 
-        if (GetAdaptersAddresses(AF_UNSPEC, 0, NULL, pAddresses, &outBufLen) == NO_ERROR)
+        IF_LUID target;
+        target.Value = 1689399632855040UL;
+
+        int counter = 1;
+        while (adapter)
         {
-            while (pAddresses)
-            {
-                std::wcout << L"AdapterName: " << pAddresses->AdapterName << "\n";
-                std::wcout << L"FriendlyName: " << pAddresses->FriendlyName << "\n";
-                std::wcout << L"Ipv4Metric: " << pAddresses->Ipv4Metric << "\n";
+            wcout << L"Num: " << counter++ << endl;
+            wcout << L"AdapterName: " << adapter->AdapterName << "\n";
+            wcout << L"Luid: " << adapter->Luid.Value << "\n";
+            wcout << L"FriendlyName: " << adapter->FriendlyName << "\n";
+            wcout << L"Ipv4Metric: " << adapter->Ipv4Metric << "\n";
 
-                std::wcout << L"DnsSuffix: " << pAddresses->DnsSuffix << "\n";
-                std::wcout << L"Description: " << pAddresses->Description << "\n\n";
+            wcout << L"DnsSuffix: " << adapter->DnsSuffix << "\n";
+            wcout << L"Description: " << adapter->Description << "\n\n";
 
-                pAddresses = pAddresses->Next;
-            }
+            adapter = adapter->Next;
         }
+
+
+        // Retrieve the IP interface table
+        MIB_IPINTERFACE_ROW row {};
+        row.Family = AF_INET; // IPv4
+        row.InterfaceLuid = target; // You need to set the appropriate LUID of the interface you want to modify
+
+        result = GetIpInterfaceEntry(&row);
+
+        if (result != NO_ERROR)
+        {
+            wcout << L"ERROR cannot get interface entry: " 
+                << last_error_as_string(result) 
+                << endl;
+            return 1;
+        }
+
+        // Change the metric
+        row.Metric = 10; // Set the desired metric
+
+        // Set the modified IP interface entry
+        result = SetIpInterfaceEntry(&row);
+
+        if (result != NO_ERROR)
+        {
+            wcout << L"ERROR cannot set interface entry: " 
+                << last_error_as_string(result) 
+                << endl;
+
+            return 1;
+        }
+
+        std::cout << "Metric changed successfully." << std::endl;
+
         return 0;
+
     }
     catch (const std::wstring& e)
     {
-        std::wcout << e << endl;
+        wcout << e << endl;
     }
     catch (str_cref e)
     {
