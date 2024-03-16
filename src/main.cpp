@@ -116,6 +116,14 @@ bool is_user_admin()
 }
 
 
+struct Heap_Deleter 
+{
+    void operator()(void* mem) const 
+    {
+        if (mem)
+            HeapFree(GetProcessHeap(), NULL, mem);
+    }
+};
 
 int wmain(int argc, wchar_t* argv[])
 {
@@ -147,7 +155,10 @@ int wmain(int argc, wchar_t* argv[])
         ULONG buffer_size = 0;
         GetAdaptersAddresses(AF_INET, NULL, NULL, NULL, &buffer_size);
         
-        void* mem = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size);
+        //void* mem = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size);
+
+        std::unique_ptr<void, Heap_Deleter > mem(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size));
+        
         if (not mem)
         {
             throw std::format(L"ERROR cannot allocate memory!");
@@ -157,7 +168,7 @@ int wmain(int argc, wchar_t* argv[])
             AF_INET,
             NULL,
             NULL,
-            (IP_ADAPTER_ADDRESSES*)mem,
+            (IP_ADAPTER_ADDRESSES*)mem.get(),
             &buffer_size);
 
         if (result != NO_ERROR)
@@ -166,7 +177,7 @@ int wmain(int argc, wchar_t* argv[])
                               last_error_as_string(result));
         }
 
-        IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem;
+        IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
 
         IF_LUID target;
         target.Value = 1689399632855040UL;
@@ -176,7 +187,7 @@ int wmain(int argc, wchar_t* argv[])
         {
             wcout << L"Num: " << counter++ << endl;
             wcout << L"AdapterName: " << adapter->AdapterName << "\n";
-            wcout << L"Luid: " << adapter->Luid.Value << "\n";
+            wcout << std::format(L"Luid: 0x{:X}", adapter->Luid.Value) << "\n";
             wcout << L"FriendlyName: " << adapter->FriendlyName << "\n";
             wcout << L"Ipv4Metric: " << adapter->Ipv4Metric << "\n";
 
