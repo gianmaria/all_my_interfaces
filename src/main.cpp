@@ -95,7 +95,7 @@ bool is_user_admin()
     if (not success)
     {
         FreeSid(AdministratorsGroup);
-        throw std::format(L"ERROR Cannot allocate SID: {}",
+        throw std::format(L"[ERROR] Cannot allocate SID: {}",
                           last_error_as_string(GetLastError()));
     }
 
@@ -106,7 +106,7 @@ bool is_user_admin()
     if (not success)
     {
         FreeSid(AdministratorsGroup);
-        throw std::format(L"ERROR CheckTokenMembership fasiled: {}",
+        throw std::format(L"[ERROR] CheckTokenMembership fasiled: {}",
                           last_error_as_string(GetLastError()));
     }
 
@@ -116,9 +116,9 @@ bool is_user_admin()
 }
 
 
-struct Heap_Deleter 
+struct Heap_Deleter
 {
-    void operator()(void* mem) const 
+    void operator()(void* mem) const
     {
         if (mem)
             HeapFree(GetProcessHeap(), NULL, mem);
@@ -141,7 +141,7 @@ int wmain(int argc, wchar_t* argv[])
 
         //    if (not ShellExecuteExW(&shellExecuteInfo))
         //    {
-        //        wcout << L"ERROR cannot start app admin: " 
+        //        wcout << L"[ERROR] cannot start app admin: " 
         //            << last_error_as_string(GetLastError())
         //            << endl;
         //        return 1;
@@ -150,18 +150,15 @@ int wmain(int argc, wchar_t* argv[])
         //    return 0;
         //}
 
-
-
         ULONG buffer_size = 0;
         GetAdaptersAddresses(AF_INET, NULL, NULL, NULL, &buffer_size);
-        
-        //void* mem = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size);
 
-        std::unique_ptr<void, Heap_Deleter > mem(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size));
-        
+        auto* mem_ = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size);
+        std::unique_ptr<void, Heap_Deleter> mem(mem_);
+
         if (not mem)
         {
-            throw std::format(L"ERROR cannot allocate memory!");
+            throw std::format(L"[ERROR] cannot allocate memory!");
         }
 
         DWORD result = GetAdaptersAddresses(
@@ -173,14 +170,14 @@ int wmain(int argc, wchar_t* argv[])
 
         if (result != NO_ERROR)
         {
-            throw std::format(L"ERROR cannot get adapters addresses: {}",
+            throw std::format(L"[ERROR] cannot get adapters addresses: {}",
                               last_error_as_string(result));
         }
 
         IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
 
         IF_LUID target;
-        target.Value = 1689399632855040UL;
+        target.Value = 0x18000000000000UL;
 
         int counter = 1;
         while (adapter)
@@ -207,8 +204,8 @@ int wmain(int argc, wchar_t* argv[])
 
         if (result != NO_ERROR)
         {
-            wcout << L"ERROR cannot get interface entry: " 
-                << last_error_as_string(result) 
+            wcout << L"[ERROR] cannot get interface entry: "
+                << last_error_as_string(result)
                 << endl;
             return 1;
         }
@@ -221,8 +218,8 @@ int wmain(int argc, wchar_t* argv[])
 
         if (result != NO_ERROR)
         {
-            wcout << L"ERROR cannot set interface entry: " 
-                << last_error_as_string(result) 
+            wcout << L"[ERROR] cannot set interface entry: "
+                << last_error_as_string(result)
                 << endl;
 
             return 1;
