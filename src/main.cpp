@@ -132,7 +132,8 @@ struct Heap_Deleter
 struct Interface
 {
     wstr name;
-    str ip;
+    wstr ip;
+    wstr gateway;
     u32 metric{ 0 };
     wstr description;
 };
@@ -141,29 +142,31 @@ int wmain(int argc, wchar_t* argv[])
 {
     try
     {
-        //if (not is_user_admin())
-        //{
-        //    // Prompt the user with a UAC dialog for elevation
-        //    SHELLEXECUTEINFO shellExecuteInfo {};
-        //    shellExecuteInfo.cbSize = sizeof(SHELLEXECUTEINFO);
-        //    shellExecuteInfo.lpVerb = L"runas"; // Request elevation
-        //    shellExecuteInfo.lpFile = argv[0]; // Path to your application executable
-        //    shellExecuteInfo.lpParameters = L""; // Optional parameters for your application
-        //    shellExecuteInfo.nShow = SW_SHOWNORMAL;
+#if 0
+        if (not is_user_admin())
+        {
+            // Prompt the user with a UAC dialog for elevation
+            SHELLEXECUTEINFO shellExecuteInfo{};
+            shellExecuteInfo.cbSize = sizeof(SHELLEXECUTEINFO);
+            shellExecuteInfo.lpVerb = L"runas"; // Request elevation
+            shellExecuteInfo.lpFile = argv[0]; // Path to your application executable
+            shellExecuteInfo.lpParameters = L""; // Optional parameters for your application
+            shellExecuteInfo.nShow = SW_SHOWNORMAL;
 
-        //    if (not ShellExecuteExW(&shellExecuteInfo))
-        //    {
-        //        wcout << L"[ERROR] cannot start app admin: " 
-        //            << last_error_as_string(GetLastError())
-        //            << endl;
-        //        return 1;
-        //    }
+            if (not ShellExecuteExW(&shellExecuteInfo))
+            {
+                wcout << L"[ERROR] cannot start app admin: "
+                    << last_error_as_string(GetLastError())
+                    << endl;
+                return 1;
+            }
 
-        //    return 0;
-        //}
+            return 0;
+        }
+#endif // 0
 
         ULONG buffer_size = 0;
-        GetAdaptersAddresses(AF_INET, NULL, NULL, NULL, &buffer_size);
+        GetAdaptersAddresses(AF_INET, GAA_FLAG_INCLUDE_GATEWAYS, NULL, NULL, &buffer_size);
 
         auto* mem_ = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size);
         std::unique_ptr<void, Heap_Deleter> mem(mem_);
@@ -175,7 +178,7 @@ int wmain(int argc, wchar_t* argv[])
 
         DWORD result = GetAdaptersAddresses(
             AF_INET,
-            NULL,
+            GAA_FLAG_INCLUDE_GATEWAYS,
             NULL,
             (IP_ADAPTER_ADDRESSES*)mem.get(),
             &buffer_size);
@@ -188,8 +191,6 @@ int wmain(int argc, wchar_t* argv[])
 
         IF_LUID target;
         target.Value = 77;
-
-        int counter = 1;
 
         vec<Interface> interfaces;
 
@@ -206,7 +207,8 @@ int wmain(int argc, wchar_t* argv[])
 
             itf.name = wstr(adapter->FriendlyName);
 
-            for (auto* addr = adapter->FirstUnicastAddress;
+            // get all the IPs
+            for (IP_ADAPTER_UNICAST_ADDRESS_LH* addr = adapter->FirstUnicastAddress;
                  addr != nullptr;
                  addr = addr->Next)
             {
@@ -214,14 +216,51 @@ int wmain(int argc, wchar_t* argv[])
                 if (addr->Address.lpSockaddr->sa_family == AF_INET)
                 {
                     // IPv4 address
-                    auto* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(addr->Address.lpSockaddr);
-                    char ip_str[INET_ADDRSTRLEN]{};
-                    inet_ntop(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
+                    sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(addr->Address.lpSockaddr);
+                    wchar_t ip_str[INET_ADDRSTRLEN]{};
+                    InetNtopW(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
 
                     //wcout << L"IPv4 Address: " << ip_str << "\n";
-                    itf.ip = str(ip_str);
+                    itf.ip.append(wstr(ip_str)).append(L" ");
                 }
             }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            for (IP_ADAPTER_GATEWAY_ADDRESS_LH* pGatewayAddresses = adapter->FirstGatewayAddress;
+                 pGatewayAddresses != nullptr;
+                 pGatewayAddresses = pGatewayAddresses->Next)
+            {
+                //sockaddr* sa = pGatewayAddresses->Address.lpSockaddr;
+                const SOCKADDR* sockaddr_ipv4 = reinterpret_cast<const SOCKADDR*>(pGatewayAddresses->Address.lpSockaddr);
+                wchar_t gatewayAddress[NI_MAXHOST];
+                GetNameInfoW(sockaddr_ipv4, sizeof(sockaddr_in),
+                             gatewayAddress, NI_MAXHOST,
+                             NULL, 0,
+                             NI_NUMERICHOST);
+
+                itf.gateway.append(wstr(gatewayAddress)).append(L" ");
+            }
+
+
+
+
+
+
+
+
+
 
             //wcout << L"Ipv4Metric: " << adapter->Ipv4Metric << "\n";
             itf.metric = adapter->Ipv4Metric;
@@ -243,10 +282,11 @@ int wmain(int argc, wchar_t* argv[])
         for (const auto& itf : interfaces)
         {
             wcout
-                << std::format(L"{}\n{}\n{}\n{}\n", itf.name, itf.metric, itf.description, itf.ip)
-                << endl;
+                << std::format(L"Name: {}\nMetric: {}\nDescription: {}\nIPv4: {}\nGateway: {}\n\n",
+                               itf.name, itf.metric, itf.description, itf.ip, itf.gateway);
         }
 
+#if 0
         // Retrieve the IP interface table
         MIB_IPINTERFACE_ROW row{};
         row.Family = AF_INET; // IPv4
@@ -278,6 +318,8 @@ int wmain(int argc, wchar_t* argv[])
         }
 
         std::cout << "Metric changed successfully." << std::endl;
+
+#endif // 0
 
         return 0;
 
