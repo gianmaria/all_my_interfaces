@@ -5,9 +5,11 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <ws2ipdef.h>
+#include <ws2tcpip.h> // for inet_ntop function
 #include <iphlpapi.h>
 
 #pragma comment(lib, "IPHLPAPI.lib")
+#pragma comment(lib, "Ws2_32.lib")
 
 
 #include <array>
@@ -50,7 +52,9 @@ using std::set;
 using std::map;
 
 using str = std::string;
+using wstr = std::wstring;
 using str_cref = std::string const&;
+using wstr_cref = std::wstring const&;
 
 template<typename T>
 using vec = vector<T>;
@@ -63,7 +67,7 @@ namespace fs = std::filesystem;
 std::wstring last_error_as_string(DWORD last_error)
 {
     auto constexpr buffer_count = 1024;
-    WCHAR buffer[buffer_count] {};
+    WCHAR buffer[buffer_count]{};
 
     DWORD size = FormatMessageW(
         FORMAT_MESSAGE_FROM_SYSTEM |
@@ -82,7 +86,7 @@ std::wstring last_error_as_string(DWORD last_error)
 bool is_user_admin()
 {
     SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
-    PSID AdministratorsGroup {};
+    PSID AdministratorsGroup{};
 
     BOOL success = AllocateAndInitializeSid(
         &NtAuthority,
@@ -123,6 +127,14 @@ struct Heap_Deleter
         if (mem)
             HeapFree(GetProcessHeap(), NULL, mem);
     }
+};
+
+struct Interface
+{
+    wstr name;
+    str ip;
+    u32 metric{ 0 };
+    wstr description;
 };
 
 int wmain(int argc, wchar_t* argv[])
@@ -174,29 +186,69 @@ int wmain(int argc, wchar_t* argv[])
                               last_error_as_string(result));
         }
 
-        IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
-
         IF_LUID target;
-        target.Value = 0x18000000000000UL;
+        target.Value = 77;
 
         int counter = 1;
-        while (adapter)
+
+        vec<Interface> interfaces;
+
+        for (auto* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
+             adapter != nullptr;
+             adapter = adapter->Next)
         {
-            wcout << L"Num: " << counter++ << endl;
-            wcout << L"AdapterName: " << adapter->AdapterName << "\n";
-            wcout << std::format(L"Luid: 0x{:X}", adapter->Luid.Value) << "\n";
-            wcout << L"FriendlyName: " << adapter->FriendlyName << "\n";
-            wcout << L"Ipv4Metric: " << adapter->Ipv4Metric << "\n";
+            Interface itf{};
 
-            wcout << L"DnsSuffix: " << adapter->DnsSuffix << "\n";
-            wcout << L"Description: " << adapter->Description << "\n\n";
+            //wcout << L"Num: " << counter++ << endl;
+            //wcout << L"AdapterName: " << adapter->AdapterName << "\n";
+            //wcout << std::format(L"Luid: 0x{:X}", adapter->Luid.Value) << "\n";
+            //wcout << L"FriendlyName: " << adapter->FriendlyName << "\n";
 
-            adapter = adapter->Next;
+            itf.name = wstr(adapter->FriendlyName);
+
+            for (auto* addr = adapter->FirstUnicastAddress;
+                 addr != nullptr;
+                 addr = addr->Next)
+            {
+                // Check if the address is IPv4
+                if (addr->Address.lpSockaddr->sa_family == AF_INET)
+                {
+                    // IPv4 address
+                    auto* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(addr->Address.lpSockaddr);
+                    char ip_str[INET_ADDRSTRLEN]{};
+                    inet_ntop(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
+
+                    //wcout << L"IPv4 Address: " << ip_str << "\n";
+                    itf.ip = str(ip_str);
+                }
+            }
+
+            //wcout << L"Ipv4Metric: " << adapter->Ipv4Metric << "\n";
+            itf.metric = adapter->Ipv4Metric;
+
+            //wcout << L"DnsSuffix: " << adapter->DnsSuffix << "\n";
+            //wcout << L"Description: " << adapter->Description << "\n\n";
+            itf.description = adapter->Description;
+
+            interfaces.push_back(std::move(itf));
         }
 
+        std::sort(interfaces.begin(),
+                  interfaces.end(),
+                  [](const Interface& a, const Interface& b)
+        {
+            return a.metric < b.metric;
+        });
+
+        for (const auto& itf : interfaces)
+        {
+            wcout
+                << std::format(L"{}\n{}\n{}\n{}\n", itf.name, itf.metric, itf.description, itf.ip)
+                << endl;
+        }
 
         // Retrieve the IP interface table
-        MIB_IPINTERFACE_ROW row {};
+        MIB_IPINTERFACE_ROW row{};
         row.Family = AF_INET; // IPv4
         row.InterfaceLuid = target; // You need to set the appropriate LUID of the interface you want to modify
 
