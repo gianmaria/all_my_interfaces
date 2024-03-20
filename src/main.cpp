@@ -138,6 +138,7 @@ struct Interface
     wstr description;
 };
 
+#if 1
 int wmain(int argc, wchar_t* argv[])
 {
     try
@@ -165,10 +166,23 @@ int wmain(int argc, wchar_t* argv[])
         }
 #endif // 0
 
-        ULONG buffer_size = 0;
-        GetAdaptersAddresses(AF_INET, GAA_FLAG_INCLUDE_GATEWAYS, NULL, NULL, &buffer_size);
+        WSADATA wsa_data {};
+        if (
+            auto res = WSAStartup(MAKEWORD(2, 2), &wsa_data);
+            res != NO_ERROR
+            )
+        {
+            throw std::format(L"[ERROR] WSAStartup failed: {}",
+                              last_error_as_string(res));
+        }
+        
 
-        auto* mem_ = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size);
+        ULONG buffer_size = 0;
+        ULONG adapters_flags = GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS;
+        
+        GetAdaptersAddresses(AF_INET, adapters_flags, NULL, NULL, &buffer_size);
+
+        auto* mem_ = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size); // 21376
         std::unique_ptr<void, Heap_Deleter> mem(mem_);
 
         if (not mem)
@@ -178,10 +192,9 @@ int wmain(int argc, wchar_t* argv[])
 
         DWORD result = GetAdaptersAddresses(
             AF_INET,
-            GAA_FLAG_INCLUDE_GATEWAYS,
+            adapters_flags,
             NULL,
-            (IP_ADAPTER_ADDRESSES*)mem.get(),
-            &buffer_size);
+            (IP_ADAPTER_ADDRESSES*)mem.get(), &buffer_size);
 
         if (result != NO_ERROR)
         {
@@ -194,7 +207,7 @@ int wmain(int argc, wchar_t* argv[])
 
         vec<Interface> interfaces;
 
-        for (auto* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
+        for (IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
              adapter != nullptr;
              adapter = adapter->Next)
         {
@@ -225,40 +238,21 @@ int wmain(int argc, wchar_t* argv[])
                 }
             }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+            // get all the Gateway
             for (IP_ADAPTER_GATEWAY_ADDRESS_LH* pGatewayAddresses = adapter->FirstGatewayAddress;
                  pGatewayAddresses != nullptr;
                  pGatewayAddresses = pGatewayAddresses->Next)
             {
-                //sockaddr* sa = pGatewayAddresses->Address.lpSockaddr;
-                const SOCKADDR* sockaddr_ipv4 = reinterpret_cast<const SOCKADDR*>(pGatewayAddresses->Address.lpSockaddr);
-                wchar_t gatewayAddress[NI_MAXHOST];
-                GetNameInfoW(sockaddr_ipv4, sizeof(sockaddr_in),
-                             gatewayAddress, NI_MAXHOST,
+                // TODO: try to use InetNtopW()
+                const SOCKADDR* sockaddr_ipv4 = pGatewayAddresses->Address.lpSockaddr;
+                wchar_t gateway_address[NI_MAXHOST];
+                GetNameInfoW(sockaddr_ipv4, sizeof(sockaddr_in), // only IPv4
+                             gateway_address, NI_MAXHOST,
                              NULL, 0,
                              NI_NUMERICHOST);
 
-                itf.gateway.append(wstr(gatewayAddress)).append(L" ");
+                itf.gateway.append(wstr(gateway_address)).append(L" ");
             }
-
-
-
-
-
-
-
 
 
 
@@ -340,4 +334,70 @@ int wmain(int argc, wchar_t* argv[])
     return 1;
 
 }
+
+
+#else
+
+int main() 
+{
+    ULONG outBufLen = 0;
+    DWORD dwRetVal = 0;
+
+    // Call GetAdaptersAddresses with a NULL pointer for the adapters parameter to get the buffer size needed.
+    dwRetVal = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &outBufLen);
+    if (dwRetVal != ERROR_BUFFER_OVERFLOW) {
+        std::cerr << "GetAdaptersAddresses call failed with error code " << dwRetVal << std::endl;
+        return 1;
+    }
+
+    // Allocate memory for the adapter addresses
+    IP_ADAPTER_ADDRESSES* pAddresses = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(malloc(outBufLen));
+    if (pAddresses == nullptr) {
+        std::cerr << "Memory allocation failed." << std::endl;
+        return 1;
+    }
+
+    // Call GetAdaptersAddresses again to retrieve the adapter addresses
+    dwRetVal = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, pAddresses, &outBufLen);
+    if (dwRetVal != NO_ERROR) {
+        std::cerr << "GetAdaptersAddresses call failed with error code " << dwRetVal << std::endl;
+        free(pAddresses);
+        return 1;
+    }
+
+    // Iterate through the adapter addresses to find the subnet mask for each adapter
+    for (IP_ADAPTER_ADDRESSES* pCurrAddresses = pAddresses; 
+         pCurrAddresses != nullptr; 
+         pCurrAddresses = pCurrAddresses->Next) 
+    {
+        IP_ADAPTER_PREFIX* pPrefix = pCurrAddresses->FirstPrefix;
+
+        if (pPrefix != nullptr) 
+        {
+            std::wcout << "Adapter Name: " << pCurrAddresses->FriendlyName << std::endl;
+
+            for (ULONG i = 1; 
+                 pPrefix != nullptr; 
+                 i++, pPrefix = pPrefix->Next) 
+            {
+                sockaddr* sa = pPrefix->Address.lpSockaddr;
+
+                if (sa->sa_family == AF_INET) 
+                {
+                    sockaddr_in* sa_in = reinterpret_cast<sockaddr_in*>(sa);
+                    
+                    char subnetString[INET_ADDRSTRLEN];
+                    InetNtopA(AF_INET, &(sa_in->sin_addr), subnetString, INET_ADDRSTRLEN);
+
+                    std::cout << "    Subnet Mask " << i << ": " << subnetString << std::endl;
+                }
+            }
+        }
+    }
+
+    free(pAddresses);
+    return 0;
+}
+
+#endif
 
