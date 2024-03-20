@@ -67,7 +67,7 @@ namespace fs = std::filesystem;
 std::wstring last_error_as_string(DWORD last_error)
 {
     auto constexpr buffer_count = 1024;
-    WCHAR buffer[buffer_count]{};
+    WCHAR buffer[buffer_count] {};
 
     DWORD size = FormatMessageW(
         FORMAT_MESSAGE_FROM_SYSTEM |
@@ -86,7 +86,7 @@ std::wstring last_error_as_string(DWORD last_error)
 bool is_user_admin()
 {
     SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
-    PSID AdministratorsGroup{};
+    PSID AdministratorsGroup {};
 
     BOOL success = AllocateAndInitializeSid(
         &NtAuthority,
@@ -134,7 +134,7 @@ struct Interface
     wstr name;
     wstr ip;
     wstr gateway;
-    u32 metric{ 0 };
+    u32 metric {0};
     wstr description;
 };
 
@@ -147,7 +147,7 @@ int wmain(int argc, wchar_t* argv[])
         if (not is_user_admin())
         {
             // Prompt the user with a UAC dialog for elevation
-            SHELLEXECUTEINFO shellExecuteInfo{};
+            SHELLEXECUTEINFO shellExecuteInfo {};
             shellExecuteInfo.cbSize = sizeof(SHELLEXECUTEINFO);
             shellExecuteInfo.lpVerb = L"runas"; // Request elevation
             shellExecuteInfo.lpFile = argv[0]; // Path to your application executable
@@ -175,11 +175,11 @@ int wmain(int argc, wchar_t* argv[])
             throw std::format(L"[ERROR] WSAStartup failed: {}",
                               last_error_as_string(res));
         }
-        
+
 
         ULONG buffer_size = 0;
-        ULONG adapters_flags = GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS;
-        
+        ULONG adapters_flags = GAA_FLAG_INCLUDE_WINS_INFO | GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS;
+
         GetAdaptersAddresses(AF_INET, adapters_flags, NULL, NULL, &buffer_size);
 
         auto* mem_ = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size); // 21376
@@ -211,78 +211,90 @@ int wmain(int argc, wchar_t* argv[])
              adapter != nullptr;
              adapter = adapter->Next)
         {
-            Interface itf{};
-
-            //wcout << L"Num: " << counter++ << endl;
-            //wcout << L"AdapterName: " << adapter->AdapterName << "\n";
-            //wcout << std::format(L"Luid: 0x{:X}", adapter->Luid.Value) << "\n";
-            //wcout << L"FriendlyName: " << adapter->FriendlyName << "\n";
+            Interface itf {};
 
             itf.name = wstr(adapter->FriendlyName);
 
             // get all the IPs
-            for (IP_ADAPTER_UNICAST_ADDRESS_LH* addr = adapter->FirstUnicastAddress;
-                 addr != nullptr;
-                 addr = addr->Next)
+            for (IP_ADAPTER_UNICAST_ADDRESS_LH* unicast_addr = adapter->FirstUnicastAddress;
+                 unicast_addr != nullptr;
+                 unicast_addr = unicast_addr->Next)
             {
-                // Check if the address is IPv4
-                if (addr->Address.lpSockaddr->sa_family == AF_INET)
-                {
-                    // IPv4 address
-                    sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(addr->Address.lpSockaddr);
-                    wchar_t ip_str[INET_ADDRSTRLEN]{};
-                    InetNtopW(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
+                sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(unicast_addr->Address.lpSockaddr);
+                wchar_t ip_str[INET_ADDRSTRLEN] {};
+                InetNtopW(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
 
-                    //wcout << L"IPv4 Address: " << ip_str << "\n";
-                    itf.ip.append(wstr(ip_str)).append(L" ");
-                }
+                itf.ip.append(wstr(ip_str)).append(L" ");
             }
 
             // get all the Gateway
-            for (IP_ADAPTER_GATEWAY_ADDRESS_LH* pGatewayAddresses = adapter->FirstGatewayAddress;
-                 pGatewayAddresses != nullptr;
-                 pGatewayAddresses = pGatewayAddresses->Next)
+            for (IP_ADAPTER_GATEWAY_ADDRESS_LH* gateway_addr = adapter->FirstGatewayAddress;
+                 gateway_addr != nullptr;
+                 gateway_addr = gateway_addr->Next)
             {
-                // TODO: try to use InetNtopW()
-                const SOCKADDR* sockaddr_ipv4 = pGatewayAddresses->Address.lpSockaddr;
-                wchar_t gateway_address[NI_MAXHOST];
-                GetNameInfoW(sockaddr_ipv4, sizeof(sockaddr_in), // only IPv4
-                             gateway_address, NI_MAXHOST,
-                             NULL, 0,
-                             NI_NUMERICHOST);
+                sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(gateway_addr->Address.lpSockaddr);
+                wchar_t gateway_str[INET_ADDRSTRLEN] {};
+                InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, gateway_str, INET_ADDRSTRLEN);
 
-                itf.gateway.append(wstr(gateway_address)).append(L" ");
+                itf.gateway.append(wstr(gateway_str)).append(L" ");
+            }
+
+            // get all the DNS
+            for (IP_ADAPTER_DNS_SERVER_ADDRESS_XP* dns_addr = adapter->FirstDnsServerAddress;
+                 dns_addr != nullptr;
+                 dns_addr = dns_addr->Next)
+            {
+                sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(dns_addr->Address.lpSockaddr);
+                wchar_t dns_str[INET_ADDRSTRLEN] {};
+                InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, dns_str, INET_ADDRSTRLEN);
+
+                int s = 0;
             }
 
 
 
-            //wcout << L"Ipv4Metric: " << adapter->Ipv4Metric << "\n";
-            itf.metric = adapter->Ipv4Metric;
 
-            //wcout << L"DnsSuffix: " << adapter->DnsSuffix << "\n";
-            //wcout << L"Description: " << adapter->Description << "\n\n";
+            // TODO:
+            // get all the DNS v2
+            for (IP_ADAPTER_DNS_SUFFIX* dns_addr = adapter->FirstDnsSuffix;
+                 dns_addr != nullptr;
+                 dns_addr = dns_addr->Next)
+            {
+                auto ss = dns_addr->String;
+                /*sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(dns_addr->Address.lpSockaddr);
+                wchar_t dns_str[INET_ADDRSTRLEN] {};
+                InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, dns_str, INET_ADDRSTRLEN);*/
+
+                int s = 0;
+            }
+
+            itf.metric = adapter->Ipv4Metric;
             itf.description = adapter->Description;
 
             interfaces.push_back(std::move(itf));
         }
 
-        std::sort(interfaces.begin(),
-                  interfaces.end(),
+
+
+        std::sort(interfaces.begin(), interfaces.end(),
                   [](const Interface& a, const Interface& b)
         {
             return a.metric < b.metric;
         });
 
+
         for (const auto& itf : interfaces)
         {
             wcout
-                << std::format(L"Name: {}\nMetric: {}\nDescription: {}\nIPv4: {}\nGateway: {}\n\n",
-                               itf.name, itf.metric, itf.description, itf.ip, itf.gateway);
+                << std::format(L"Name: {}\nMetric: {}\nDescription: {}\nIPv4: {}\nGateway: {}\n",
+                               itf.name, itf.metric, itf.description, itf.ip, itf.gateway)
+                << endl;
         }
+
 
 #if 0
         // Retrieve the IP interface table
-        MIB_IPINTERFACE_ROW row{};
+        MIB_IPINTERFACE_ROW row {};
         row.Family = AF_INET; // IPv4
         row.InterfaceLuid = target; // You need to set the appropriate LUID of the interface you want to modify
 
@@ -338,66 +350,67 @@ int wmain(int argc, wchar_t* argv[])
 
 #else
 
-int main() 
-{
+#include <iostream>
+#include <iphlpapi.h>
+#include <stdio.h>
+
+#pragma comment(lib, "IPHLPAPI.lib")
+
+int main() {
+    // Define variables
     ULONG outBufLen = 0;
     DWORD dwRetVal = 0;
+    PIP_ADAPTER_ADDRESSES pAddresses = NULL;
+    PIP_ADAPTER_ADDRESSES pCurrAddresses = NULL;
 
-    // Call GetAdaptersAddresses with a NULL pointer for the adapters parameter to get the buffer size needed.
-    dwRetVal = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &outBufLen);
-    if (dwRetVal != ERROR_BUFFER_OVERFLOW) {
-        std::cerr << "GetAdaptersAddresses call failed with error code " << dwRetVal << std::endl;
-        return 1;
-    }
-
-    // Allocate memory for the adapter addresses
-    IP_ADAPTER_ADDRESSES* pAddresses = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(malloc(outBufLen));
-    if (pAddresses == nullptr) {
-        std::cerr << "Memory allocation failed." << std::endl;
-        return 1;
-    }
-
-    // Call GetAdaptersAddresses again to retrieve the adapter addresses
-    dwRetVal = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, pAddresses, &outBufLen);
-    if (dwRetVal != NO_ERROR) {
-        std::cerr << "GetAdaptersAddresses call failed with error code " << dwRetVal << std::endl;
-        free(pAddresses);
-        return 1;
-    }
-
-    // Iterate through the adapter addresses to find the subnet mask for each adapter
-    for (IP_ADAPTER_ADDRESSES* pCurrAddresses = pAddresses; 
-         pCurrAddresses != nullptr; 
-         pCurrAddresses = pCurrAddresses->Next) 
-    {
-        IP_ADAPTER_PREFIX* pPrefix = pCurrAddresses->FirstPrefix;
-
-        if (pPrefix != nullptr) 
-        {
-            std::wcout << "Adapter Name: " << pCurrAddresses->FriendlyName << std::endl;
-
-            for (ULONG i = 1; 
-                 pPrefix != nullptr; 
-                 i++, pPrefix = pPrefix->Next) 
-            {
-                sockaddr* sa = pPrefix->Address.lpSockaddr;
-
-                if (sa->sa_family == AF_INET) 
-                {
-                    sockaddr_in* sa_in = reinterpret_cast<sockaddr_in*>(sa);
-                    
-                    char subnetString[INET_ADDRSTRLEN];
-                    InetNtopA(AF_INET, &(sa_in->sin_addr), subnetString, INET_ADDRSTRLEN);
-
-                    std::cout << "    Subnet Mask " << i << ": " << subnetString << std::endl;
-                }
-            }
+    // Call GetAdaptersAddresses to retrieve adapter information
+    dwRetVal = GetAdaptersAddresses(AF_UNSPEC, 0, NULL, NULL, &outBufLen);
+    if (dwRetVal == ERROR_BUFFER_OVERFLOW) {
+        // Allocate memory for adapter information
+        pAddresses = (IP_ADAPTER_ADDRESSES*)malloc(outBufLen);
+        if (pAddresses == NULL) {
+            std::cerr << "Error allocating memory needed to call GetAdaptersAddresses\n";
+            return 1;
         }
     }
+    else {
+        std::cerr << "Error calling GetAdaptersAddresses function with error code " << dwRetVal << std::endl;
+        return 1;
+    }
 
-    free(pAddresses);
+    // Call GetAdaptersAddresses again to retrieve adapter information
+    dwRetVal = GetAdaptersAddresses(AF_UNSPEC, 0, NULL, pAddresses, &outBufLen);
+    if (dwRetVal == NO_ERROR) {
+        pCurrAddresses = pAddresses;
+        while (pCurrAddresses) {
+            // Print adapter information
+            printf("Adapter Name: %s\n", pCurrAddresses->AdapterName);
+            printf("Adapter Description: %ws\n", pCurrAddresses->Description);
+
+            // Iterate through the list of unicast addresses
+            PIP_ADAPTER_UNICAST_ADDRESS pUnicast = pCurrAddresses->FirstUnicastAddress;
+            while (pUnicast) {
+                printf("\tIP Address: %s\n", pUnicast->Address.lpSockaddr->sa_data);
+                pUnicast = pUnicast->Next;
+            }
+
+            printf("\n");
+
+            pCurrAddresses = pCurrAddresses->Next;
+}
+    }
+    else {
+        std::cerr << "Error calling GetAdaptersAddresses function with error code " << dwRetVal << std::endl;
+    }
+
+    // Free allocated memory
+    if (pAddresses != NULL) {
+        free(pAddresses);
+    }
+
     return 0;
 }
+
 
 #endif
 
