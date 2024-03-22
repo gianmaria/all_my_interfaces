@@ -133,7 +133,10 @@ struct Interface
 {
     wstr name;
     wstr ip;
+    u8 subnet {0};
     wstr gateway;
+    wstr dns;
+    wstr dns_suff;
     u32 metric {0};
     wstr description;
 };
@@ -167,15 +170,13 @@ int wmain(int argc, wchar_t* argv[])
 #endif // 0
 
         WSADATA wsa_data {};
-        if (
-            auto res = WSAStartup(MAKEWORD(2, 2), &wsa_data);
-            res != NO_ERROR
-            )
+        auto wsa_res = WSAStartup(MAKEWORD(2, 2), &wsa_data);
+
+        if (wsa_res!= NO_ERROR)
         {
             throw std::format(L"[ERROR] WSAStartup failed: {}",
-                              last_error_as_string(res));
+                              last_error_as_string(wsa_res));
         }
-
 
         ULONG buffer_size = 0;
         ULONG adapters_flags = GAA_FLAG_INCLUDE_WINS_INFO | GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS;
@@ -207,14 +208,14 @@ int wmain(int argc, wchar_t* argv[])
 
         vec<Interface> interfaces;
 
-        for (IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
-             adapter != nullptr;
-             adapter = adapter->Next)
+        IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
+
+        while(adapter != nullptr)
         {
             Interface itf {};
 
             itf.name = wstr(adapter->FriendlyName);
-
+            
             // get all the IPs
             for (IP_ADAPTER_UNICAST_ADDRESS_LH* unicast_addr = adapter->FirstUnicastAddress;
                  unicast_addr != nullptr;
@@ -225,6 +226,7 @@ int wmain(int argc, wchar_t* argv[])
                 InetNtopW(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
 
                 itf.ip.append(wstr(ip_str)).append(L" ");
+                itf.subnet = unicast_addr->OnLinkPrefixLength;
             }
 
             // get all the Gateway
@@ -248,30 +250,18 @@ int wmain(int argc, wchar_t* argv[])
                 wchar_t dns_str[INET_ADDRSTRLEN] {};
                 InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, dns_str, INET_ADDRSTRLEN);
 
-                int s = 0;
+                itf.dns.append(wstr(dns_str)).append(L" ");
             }
 
-
-
-
-            // TODO:
-            // get all the DNS v2
-            for (IP_ADAPTER_DNS_SUFFIX* dns_addr = adapter->FirstDnsSuffix;
-                 dns_addr != nullptr;
-                 dns_addr = dns_addr->Next)
-            {
-                auto ss = dns_addr->String;
-                /*sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(dns_addr->Address.lpSockaddr);
-                wchar_t dns_str[INET_ADDRSTRLEN] {};
-                InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, dns_str, INET_ADDRSTRLEN);*/
-
-                int s = 0;
-            }
+            itf.dns_suff = adapter->DnsSuffix;
 
             itf.metric = adapter->Ipv4Metric;
             itf.description = adapter->Description;
 
             interfaces.push_back(std::move(itf));
+
+
+            adapter = adapter->Next;
         }
 
 
@@ -286,9 +276,13 @@ int wmain(int argc, wchar_t* argv[])
         for (const auto& itf : interfaces)
         {
             wcout
-                << std::format(L"Name: {}\nMetric: {}\nDescription: {}\nIPv4: {}\nGateway: {}\n",
-                               itf.name, itf.metric, itf.description, itf.ip, itf.gateway)
-                << endl;
+                << L"Name: " << itf.name << L" - " << itf.description << endl
+                << L"Metric: " << itf.metric << endl
+                //<< L"Description: " << itf.description << endl
+                << L"IPv4: " << itf.ip << L"/" << itf.subnet << endl
+                << L"Gateway: " << itf.gateway << endl
+                << L"DNS: " << itf.dns << L"(" << itf.dns_suff << L")" << endl
+                << endl;       
         }
 
 
@@ -372,8 +366,7 @@ int main() {
             std::cerr << "Error allocating memory needed to call GetAdaptersAddresses\n";
             return 1;
         }
-    }
-    else {
+    } else {
         std::cerr << "Error calling GetAdaptersAddresses function with error code " << dwRetVal << std::endl;
         return 1;
     }
@@ -391,15 +384,24 @@ int main() {
             PIP_ADAPTER_UNICAST_ADDRESS pUnicast = pCurrAddresses->FirstUnicastAddress;
             while (pUnicast) {
                 printf("\tIP Address: %s\n", pUnicast->Address.lpSockaddr->sa_data);
+
+                // Retrieve subnet mask
+                printf("\tSubnet Mask: ");
+                for (int i = 0; i < pUnicast->OnLinkPrefixLength / 8; ++i) {
+                    printf("%u", pUnicast->OnLinkPrefixLength > 8 * (i + 1) ? 255 : (255 - (255 >> (pUnicast->OnLinkPrefixLength % 8))));
+                    if (i < 3)
+                        printf(".");
+                }
+                printf("\n");
+
                 pUnicast = pUnicast->Next;
             }
 
             printf("\n");
 
             pCurrAddresses = pCurrAddresses->Next;
-}
-    }
-    else {
+        }
+    } else {
         std::cerr << "Error calling GetAdaptersAddresses function with error code " << dwRetVal << std::endl;
     }
 
@@ -410,7 +412,6 @@ int main() {
 
     return 0;
 }
-
 
 #endif
 
