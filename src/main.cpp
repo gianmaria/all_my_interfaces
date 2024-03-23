@@ -141,6 +141,24 @@ struct Interface
     wstr description;
 };
 
+struct WSA_Startup
+{
+
+    WSA_Startup(WORD version)
+    {
+        res = WSAStartup(version, &wsa_data);
+    }
+
+    ~WSA_Startup()
+    {
+        // we ignore return code here
+        WSACleanup();
+    }
+
+    WSADATA wsa_data {};
+    int res {};
+};
+
 #if 1
 int wmain(int argc, wchar_t* argv[])
 {
@@ -169,13 +187,10 @@ int wmain(int argc, wchar_t* argv[])
         }
 #endif // 0
 
-        WSADATA wsa_data {};
-        auto wsa_res = WSAStartup(MAKEWORD(2, 2), &wsa_data);
-
-        if (wsa_res!= NO_ERROR)
+        auto wsa = WSA_Startup(MAKEWORD(2, 2));
+        if (wsa.res != NO_ERROR)
         {
-            throw std::format(L"[ERROR] WSAStartup failed: {}",
-                              last_error_as_string(wsa_res));
+            throw std::format(L"[ERROR] WSAStartup failed with code: {}", wsa.res);
         }
 
         ULONG buffer_size = 0;
