@@ -69,6 +69,48 @@ using namespace std::string_view_literals;
 
 namespace fs = std::filesystem;
 
+
+struct Heap_Deleter
+{
+    void operator()(void* mem) const
+    {
+        if (mem)
+            HeapFree(GetProcessHeap(), NULL, mem);
+    }
+};
+
+struct Interface
+{
+    wstr name;
+    wstr description;
+    wstr ip;
+    u8 subnet {0};
+    wstr gateway;
+    wstr dns;
+    wstr dns_suff;
+    u32 metric {0};
+    bool connected {false};
+    IF_LUID luid {};
+};
+
+struct WSA_Startup
+{
+
+    WSA_Startup(WORD version)
+    {
+        res = WSAStartup(version, &wsa_data);
+    }
+
+    ~WSA_Startup()
+    {
+        // we ignore return code here
+        WSACleanup();
+    }
+
+    WSADATA wsa_data {};
+    int res {};
+};
+
 std::wstring last_error_as_string(DWORD last_error)
 {
     auto constexpr buffer_count = 1024;
@@ -123,48 +165,6 @@ bool is_user_admin()
 
     return (is_member > 0);
 }
-
-
-struct Heap_Deleter
-{
-    void operator()(void* mem) const
-    {
-        if (mem)
-            HeapFree(GetProcessHeap(), NULL, mem);
-    }
-};
-
-struct Interface
-{
-    wstr name;
-    wstr description;
-    wstr ip;
-    u8 subnet {0};
-    wstr gateway;
-    wstr dns;
-    wstr dns_suff;
-    u32 metric {0};
-    bool connected {false};
-    IF_LUID luid {};
-};
-
-struct WSA_Startup
-{
-
-    WSA_Startup(WORD version)
-    {
-        res = WSAStartup(version, &wsa_data);
-    }
-
-    ~WSA_Startup()
-    {
-        // we ignore return code here
-        WSACleanup();
-    }
-
-    WSADATA wsa_data {};
-    int res {};
-};
 
 void print_nic_info(const vec<Interface>& interfaces)
 {
@@ -409,74 +409,7 @@ int wmain(int argc, wchar_t* argv[])
 
 #else
 
-#include <iostream>
-#include <iphlpapi.h>
-#include <stdio.h>
 
-#pragma comment(lib, "IPHLPAPI.lib")
-
-int main() {
-    // Define variables
-    ULONG outBufLen = 0;
-    DWORD dwRetVal = 0;
-    PIP_ADAPTER_ADDRESSES pAddresses = NULL;
-    PIP_ADAPTER_ADDRESSES pCurrAddresses = NULL;
-
-    // Call GetAdaptersAddresses to retrieve adapter information
-    dwRetVal = GetAdaptersAddresses(AF_UNSPEC, 0, NULL, NULL, &outBufLen);
-    if (dwRetVal == ERROR_BUFFER_OVERFLOW) {
-        // Allocate memory for adapter information
-        pAddresses = (IP_ADAPTER_ADDRESSES*)malloc(outBufLen);
-        if (pAddresses == NULL) {
-            std::cerr << "Error allocating memory needed to call GetAdaptersAddresses\n";
-            return 1;
-        }
-    } else {
-        std::cerr << "Error calling GetAdaptersAddresses function with error code " << dwRetVal << std::endl;
-        return 1;
-    }
-
-    // Call GetAdaptersAddresses again to retrieve adapter information
-    dwRetVal = GetAdaptersAddresses(AF_UNSPEC, 0, NULL, pAddresses, &outBufLen);
-    if (dwRetVal == NO_ERROR) {
-        pCurrAddresses = pAddresses;
-        while (pCurrAddresses) {
-            // Print adapter information
-            printf("Adapter Name: %s\n", pCurrAddresses->AdapterName);
-            printf("Adapter Description: %ws\n", pCurrAddresses->Description);
-
-            // Iterate through the list of unicast addresses
-            PIP_ADAPTER_UNICAST_ADDRESS pUnicast = pCurrAddresses->FirstUnicastAddress;
-            while (pUnicast) {
-                printf("\tIP Address: %s\n", pUnicast->Address.lpSockaddr->sa_data);
-
-                // Retrieve subnet mask
-                printf("\tSubnet Mask: ");
-                for (int i = 0; i < pUnicast->OnLinkPrefixLength / 8; ++i) {
-                    printf("%u", pUnicast->OnLinkPrefixLength > 8 * (i + 1) ? 255 : (255 - (255 >> (pUnicast->OnLinkPrefixLength % 8))));
-                    if (i < 3)
-                        printf(".");
-                }
-                printf("\n");
-
-                pUnicast = pUnicast->Next;
-            }
-
-            printf("\n");
-
-            pCurrAddresses = pCurrAddresses->Next;
-        }
-    } else {
-        std::cerr << "Error calling GetAdaptersAddresses function with error code " << dwRetVal << std::endl;
-    }
-
-    // Free allocated memory
-    if (pAddresses != NULL) {
-        free(pAddresses);
-    }
-
-    return 0;
-}
 
 #endif
 
