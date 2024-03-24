@@ -94,6 +94,7 @@ struct Interface
     u32 metric {0};
     bool connected {false};
     IF_LUID luid {};
+    IF_INDEX index {};
 };
 
 struct WSA_Startup
@@ -130,7 +131,7 @@ str wide_to_UTF8(wstr_cref wide_str)
     if (size == 0)
         return "";
 
-    std::string utf8_str(size, '\0');
+    auto utf8_str = std::string(size, '\0');
 
     WideCharToMultiByte(
         CP_UTF8,
@@ -145,7 +146,7 @@ str wide_to_UTF8(wstr_cref wide_str)
     return utf8_str;
 }
 
-wstr UTF8ToWide(str_cref utf8String) 
+wstr UTF8ToWide(str_cref utf8String)
 {
     int size = MultiByteToWideChar(CP_UTF8, 0, utf8String.data(), -1, nullptr, 0);
     if (size == 0)
@@ -219,8 +220,8 @@ void print_nic_info(const vec<Interface>& interfaces)
     {
         wcout
             << L"Name: " << itf.name << L" - " << itf.description << endl
+            << L"Metric: " << itf.metric << L" Index: " << itf.index << endl
             << L"Status: " << (itf.connected ? L"Connected" : L"Disconnected") << endl
-            << L"Metric: " << itf.metric << endl
             //<< L"Description: " << itf.description << endl
             << L"IPv4: " << itf.ip << L"/" << itf.subnet << endl
             << L"Gateway: " << itf.gateway << endl
@@ -236,7 +237,7 @@ void dump_nic_info(const vec<Interface>& interfaces,
     typedef GenericStringBuffer<UTF16<>> WStringBuffer;
     WStringBuffer wsb;
     PrettyWriter<WStringBuffer, UTF16<>, UTF16<>> writer(wsb);
-    
+
     writer.StartArray();
 
     for (const auto& itf : interfaces)
@@ -258,61 +259,104 @@ void dump_nic_info(const vec<Interface>& interfaces,
     ofs << wsb.GetString();
 }
 
+void update_metric_for_luid(IF_LUID luid,
+                            ULONG new_metric
+)
+{
+    // Retrieve the IP interface table
+    MIB_IPINTERFACE_ROW row {};
+    row.Family = AF_INET; // IPv4
+    row.InterfaceLuid = luid; 
+
+    DWORD result = GetIpInterfaceEntry(&row);
+    row.SitePrefixLength = 32; // For an IPv4 address, any value greater than 32 is an illegal value.
+
+    if (result != NO_ERROR)
+    {
+        throw std::format(L"[ERROR] cannot get interface entry: {}", 
+                          last_error_as_string(result));
+    }
+
+    // Change the metric
+    row.Metric = new_metric; // Set the desired metric
+
+    // Set the modified IP interface entry
+    result = SetIpInterfaceEntry(&row);
+    
+    if (result != NO_ERROR)
+    {
+        throw std::format(L"[ERROR] Cannot set interface entry: {}", 
+                          last_error_as_string(result));
+    }
+
+}
+
 void update_nic_metric(const vec<Interface>& interfaces,
                        wstr_cref filename)
 {
     std::wifstream inputFile(filename);
 
-    if (not inputFile.is_open()) 
+    if (not inputFile.is_open())
     {
         throw std::format(L"[ERROR] Cannot open file '{}' for reading", filename);
     }
 
-    std::wstring jsonContent((std::istreambuf_iterator<wchar_t>(inputFile)), std::istreambuf_iterator<wchar_t>());
+    std::wstring jsonContent(std::istreambuf_iterator<wchar_t>{inputFile},
+                             std::istreambuf_iterator<wchar_t>{});
 
     GenericDocument<UTF16<>> document;
 
-    if (document.Parse(jsonContent.data()).HasParseError()) 
+    if (document.Parse(jsonContent.data()).HasParseError())
     {
         auto why = GetParseError_En(document.GetParseError());
         throw std::format(L"[ERROR] Cannot parse JSON '{}': {}", filename, UTF8ToWide(why));
     }
 
-    if (document.IsArray()) 
+    if (not document.IsArray())
     {
-        // Iterate over the array elements
-        for (SizeType i = 0; i < document.Size(); ++i) 
-        {
-            // Check if the array element is a string
-            if (document[i].IsString()) 
-            {
-                std::wcout << L"Element " << i << ": " << document[i].GetString() << std::endl;
-            } 
-            else 
-            {
-                std::wcerr << L"Array element " << i << L" is not a string." << std::endl;
-            }
-        }
-    } 
-    else 
-    {
-        std::cerr << "Root value is not an array." << std::endl;
+        throw std::format(L"[ERROR] Root value is not an array.");
     }
 
-    int s = 0;
+    // Iterate over the array elements
+    for (SizeType i = 0; i < document.Size(); ++i)
+    {
+        // Check if the array element is a string
+        if (document[i].IsString())
+        {
+            //std::wcout << L"Element " << i << ": " << document[i].GetString() << std::endl;
+            auto target_name = document[i].GetString();
+
+            auto it = std::find_if(interfaces.begin(), interfaces.end(), 
+                                   [&target_name](const Interface& itf) 
+            {
+                return itf.name == target_name;
+            });
+
+            if (it == interfaces.end())
+            {
+                wcout << std::format(L"[INFO] Cannot find interface '{}', skipping...", target_name);
+                continue;
+            }
+
+            ULONG new_metric = (i + 1) * 10;
+            update_metric_for_luid(it->luid,
+                                   new_metric);
+            
+            wcout << std::format(L"[INFO] interface '{}' updated succesfully, new metric: {}", 
+                                 target_name, new_metric) << endl;
+        }
+
+    }
 }
 
 
 vec<Interface> collect_nic_info()
 {
-    auto wsa = WSA_Startup(MAKEWORD(2, 2));
-    if (wsa.res != NO_ERROR)
-    {
-        throw std::format(L"[ERROR] WSAStartup failed with code: {}", wsa.res);
-    }
-
     ULONG buffer_size = 0;
-    ULONG adapters_flags = GAA_FLAG_INCLUDE_WINS_INFO | GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS;
+    ULONG adapters_flags = 
+        GAA_FLAG_INCLUDE_WINS_INFO | 
+        GAA_FLAG_INCLUDE_PREFIX | 
+        GAA_FLAG_INCLUDE_GATEWAYS;
 
     GetAdaptersAddresses(AF_INET, adapters_flags, NULL, NULL, &buffer_size);
 
@@ -347,6 +391,7 @@ vec<Interface> collect_nic_info()
         itf.name = wstr(adapter->FriendlyName);
         itf.luid = adapter->Luid;
         itf.connected = adapter->OperStatus == IfOperStatusUp;
+        itf.index = adapter->IfIndex;
 
         // get all the IPs
         for (IP_ADAPTER_UNICAST_ADDRESS_LH* unicast_addr = adapter->FirstUnicastAddress;
@@ -422,46 +467,19 @@ if (not is_user_admin())
 }
 #endif // 0
 
-#if 0
-// Retrieve the IP interface table
-MIB_IPINTERFACE_ROW row {};
-row.Family = AF_INET; // IPv4
-row.InterfaceLuid = target; // You need to set the appropriate LUID of the interface you want to modify
 
-result = GetIpInterfaceEntry(&row);
-
-if (result != NO_ERROR)
-{
-    wcout << L"[ERROR] cannot get interface entry: "
-        << last_error_as_string(result)
-        << endl;
-    return 1;
-}
-
-// Change the metric
-row.Metric = 10; // Set the desired metric
-
-// Set the modified IP interface entry
-result = SetIpInterfaceEntry(&row);
-
-if (result != NO_ERROR)
-{
-    wcout << L"[ERROR] cannot set interface entry: "
-        << last_error_as_string(result)
-        << endl;
-
-    return 1;
-}
-
-std::cout << "Metric changed successfully." << std::endl;
-
-#endif // 0
 
 #if 1
 int wmain(int argc, wchar_t* argv[])
 {
     try
     {
+        auto wsa = WSA_Startup(MAKEWORD(2, 2));
+        if (wsa.res != NO_ERROR)
+        {
+            throw std::format(L"[ERROR] WSAStartup failed with code: {}", wsa.res);
+        }
+
         vec<Interface> interfaces = collect_nic_info();
 
         std::sort(interfaces.begin(), interfaces.end(),
@@ -470,7 +488,7 @@ int wmain(int argc, wchar_t* argv[])
             return a.metric < b.metric;
         });
 
-        print_nic_info(interfaces);
+        //print_nic_info(interfaces);
 
         //dump_nic_info(interfaces, L"nic.json");
 
