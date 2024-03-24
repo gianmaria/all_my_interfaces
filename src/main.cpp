@@ -32,6 +32,11 @@
 #include <string>
 #include <vector>
 
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
+using namespace rapidjson;
+
 using u8 = uint8_t;
 using u16 = uint16_t;
 using u32 = uint32_t;
@@ -181,7 +186,26 @@ void print_nic_info(const vec<Interface>& interfaces)
 void dump_nic_info(const vec<Interface>& interfaces,
                    wstr_cref filename)
 {
+    std::wstringstream ss;
+    
+    ss << L"[" << endl;
+    
+    for (const auto& itf : interfaces)
+    {
+        ss << std::format(L"    \"{}\",", itf.name) << endl;
+    }
+    
+    ss << endl << L"    \"dummy, leave it last\"" << endl;
+    ss << L"]" << endl;
 
+    std::wofstream ofs(filename, std::ios::out | std::ios::trunc);
+
+    if (not ofs.is_open())
+    {
+        throw std::format(L"[ERROR] Cannot open file '{}' for writing", filename);
+    }
+
+    ofs << ss.str();
 }
 
 
@@ -361,7 +385,6 @@ int wmain(int argc, wchar_t* argv[])
         print_nic_info(interfaces);
         
         dump_nic_info(interfaces, L"nic.json");
-
 
         return 0;
 
