@@ -132,13 +132,15 @@ struct Heap_Deleter
 struct Interface
 {
     wstr name;
+    wstr description;
     wstr ip;
     u8 subnet {0};
     wstr gateway;
     wstr dns;
     wstr dns_suff;
     u32 metric {0};
-    wstr description;
+    bool connected {false};
+    IF_LUID luid {};
 };
 
 struct WSA_Startup
@@ -198,7 +200,7 @@ int wmain(int argc, wchar_t* argv[])
 
         GetAdaptersAddresses(AF_INET, adapters_flags, NULL, NULL, &buffer_size);
 
-        auto* mem_ = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size); // 21376
+        auto* mem_ = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size);
         std::unique_ptr<void, Heap_Deleter> mem(mem_);
 
         if (not mem)
@@ -218,9 +220,6 @@ int wmain(int argc, wchar_t* argv[])
                               last_error_as_string(result));
         }
 
-        IF_LUID target;
-        target.Value = 77;
-
         vec<Interface> interfaces;
 
         IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
@@ -230,7 +229,9 @@ int wmain(int argc, wchar_t* argv[])
             Interface itf {};
 
             itf.name = wstr(adapter->FriendlyName);
-            
+            itf.luid = adapter->Luid;
+            itf.connected = adapter->OperStatus == IfOperStatusUp;
+
             // get all the IPs
             for (IP_ADAPTER_UNICAST_ADDRESS_LH* unicast_addr = adapter->FirstUnicastAddress;
                  unicast_addr != nullptr;
@@ -291,7 +292,8 @@ int wmain(int argc, wchar_t* argv[])
         for (const auto& itf : interfaces)
         {
             wcout
-                << L"Name: " << itf.name << L" - " << itf.description << endl
+                << L"Name: " << itf.name << L" - " << itf.description  << endl
+                << L"Status: " << (itf.connected ? L"Connected" : L"Disconnected") << endl
                 << L"Metric: " << itf.metric << endl
                 //<< L"Description: " << itf.description << endl
                 << L"IPv4: " << itf.ip << L"/" << itf.subnet << endl
