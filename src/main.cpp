@@ -161,11 +161,132 @@ struct WSA_Startup
     int res {};
 };
 
-#if 1
-int wmain(int argc, wchar_t* argv[])
+void print_nic_info(const vec<Interface>& interfaces)
 {
-    try
+    for (const auto& itf : interfaces)
     {
+        wcout
+            << L"Name: " << itf.name << L" - " << itf.description  << endl
+            << L"Status: " << (itf.connected ? L"Connected" : L"Disconnected") << endl
+            << L"Metric: " << itf.metric << endl
+            //<< L"Description: " << itf.description << endl
+            << L"IPv4: " << itf.ip << L"/" << itf.subnet << endl
+            << L"Gateway: " << itf.gateway << endl
+            << L"DNS: " << itf.dns << L"(" << itf.dns_suff << L")" << endl
+            << endl;       
+    }
+
+}
+
+void dump_nic_info(const vec<Interface>& interfaces,
+                   wstr_cref filename)
+{
+
+}
+
+
+void update_nic_metric()
+{
+
+}
+
+
+vec<Interface> collect_nic_info()
+{
+    auto wsa = WSA_Startup(MAKEWORD(2, 2));
+    if (wsa.res != NO_ERROR)
+    {
+        throw std::format(L"[ERROR] WSAStartup failed with code: {}", wsa.res);
+    }
+
+    ULONG buffer_size = 0;
+    ULONG adapters_flags = GAA_FLAG_INCLUDE_WINS_INFO | GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS;
+
+    GetAdaptersAddresses(AF_INET, adapters_flags, NULL, NULL, &buffer_size);
+
+    auto* mem_ = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size);
+    std::unique_ptr<void, Heap_Deleter> mem(mem_);
+
+    if (not mem)
+    {
+        throw std::format(L"[ERROR] cannot allocate memory!");
+    }
+
+    DWORD result = GetAdaptersAddresses(
+        AF_INET,
+        adapters_flags,
+        NULL,
+        (IP_ADAPTER_ADDRESSES*)mem.get(), &buffer_size);
+
+    if (result != NO_ERROR)
+    {
+        throw std::format(L"[ERROR] cannot get adapters addresses: {}",
+                          last_error_as_string(result));
+    }
+
+    vec<Interface> interfaces;
+
+    IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
+
+    while(adapter != nullptr)
+    {
+        Interface itf {};
+
+        itf.name = wstr(adapter->FriendlyName);
+        itf.luid = adapter->Luid;
+        itf.connected = adapter->OperStatus == IfOperStatusUp;
+
+        // get all the IPs
+        for (IP_ADAPTER_UNICAST_ADDRESS_LH* unicast_addr = adapter->FirstUnicastAddress;
+             unicast_addr != nullptr;
+             unicast_addr = unicast_addr->Next)
+        {
+            sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(unicast_addr->Address.lpSockaddr);
+            wchar_t ip_str[INET_ADDRSTRLEN] {};
+            InetNtopW(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
+
+            itf.ip.append(wstr(ip_str)).append(L" ");
+            itf.subnet = unicast_addr->OnLinkPrefixLength;
+        }
+
+        // get all the Gateway
+        for (IP_ADAPTER_GATEWAY_ADDRESS_LH* gateway_addr = adapter->FirstGatewayAddress;
+             gateway_addr != nullptr;
+             gateway_addr = gateway_addr->Next)
+        {
+            sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(gateway_addr->Address.lpSockaddr);
+            wchar_t gateway_str[INET_ADDRSTRLEN] {};
+            InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, gateway_str, INET_ADDRSTRLEN);
+
+            itf.gateway.append(wstr(gateway_str)).append(L" ");
+        }
+
+        // get all the DNS
+        for (IP_ADAPTER_DNS_SERVER_ADDRESS_XP* dns_addr = adapter->FirstDnsServerAddress;
+             dns_addr != nullptr;
+             dns_addr = dns_addr->Next)
+        {
+            sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(dns_addr->Address.lpSockaddr);
+            wchar_t dns_str[INET_ADDRSTRLEN] {};
+            InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, dns_str, INET_ADDRSTRLEN);
+
+            itf.dns.append(wstr(dns_str)).append(L" ");
+        }
+
+        itf.dns_suff = adapter->DnsSuffix;
+
+        itf.metric = adapter->Ipv4Metric;
+        itf.description = adapter->Description;
+
+        interfaces.push_back(std::move(itf));
+
+
+        adapter = adapter->Next;
+    }
+
+    return interfaces;
+}
+
 #if 0
         if (not is_user_admin())
         {
@@ -188,120 +309,6 @@ int wmain(int argc, wchar_t* argv[])
             return 0;
         }
 #endif // 0
-
-        auto wsa = WSA_Startup(MAKEWORD(2, 2));
-        if (wsa.res != NO_ERROR)
-        {
-            throw std::format(L"[ERROR] WSAStartup failed with code: {}", wsa.res);
-        }
-
-        ULONG buffer_size = 0;
-        ULONG adapters_flags = GAA_FLAG_INCLUDE_WINS_INFO | GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS;
-
-        GetAdaptersAddresses(AF_INET, adapters_flags, NULL, NULL, &buffer_size);
-
-        auto* mem_ = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size);
-        std::unique_ptr<void, Heap_Deleter> mem(mem_);
-
-        if (not mem)
-        {
-            throw std::format(L"[ERROR] cannot allocate memory!");
-        }
-
-        DWORD result = GetAdaptersAddresses(
-            AF_INET,
-            adapters_flags,
-            NULL,
-            (IP_ADAPTER_ADDRESSES*)mem.get(), &buffer_size);
-
-        if (result != NO_ERROR)
-        {
-            throw std::format(L"[ERROR] cannot get adapters addresses: {}",
-                              last_error_as_string(result));
-        }
-
-        vec<Interface> interfaces;
-
-        IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
-
-        while(adapter != nullptr)
-        {
-            Interface itf {};
-
-            itf.name = wstr(adapter->FriendlyName);
-            itf.luid = adapter->Luid;
-            itf.connected = adapter->OperStatus == IfOperStatusUp;
-
-            // get all the IPs
-            for (IP_ADAPTER_UNICAST_ADDRESS_LH* unicast_addr = adapter->FirstUnicastAddress;
-                 unicast_addr != nullptr;
-                 unicast_addr = unicast_addr->Next)
-            {
-                sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(unicast_addr->Address.lpSockaddr);
-                wchar_t ip_str[INET_ADDRSTRLEN] {};
-                InetNtopW(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
-
-                itf.ip.append(wstr(ip_str)).append(L" ");
-                itf.subnet = unicast_addr->OnLinkPrefixLength;
-            }
-
-            // get all the Gateway
-            for (IP_ADAPTER_GATEWAY_ADDRESS_LH* gateway_addr = adapter->FirstGatewayAddress;
-                 gateway_addr != nullptr;
-                 gateway_addr = gateway_addr->Next)
-            {
-                sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(gateway_addr->Address.lpSockaddr);
-                wchar_t gateway_str[INET_ADDRSTRLEN] {};
-                InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, gateway_str, INET_ADDRSTRLEN);
-
-                itf.gateway.append(wstr(gateway_str)).append(L" ");
-            }
-
-            // get all the DNS
-            for (IP_ADAPTER_DNS_SERVER_ADDRESS_XP* dns_addr = adapter->FirstDnsServerAddress;
-                 dns_addr != nullptr;
-                 dns_addr = dns_addr->Next)
-            {
-                sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(dns_addr->Address.lpSockaddr);
-                wchar_t dns_str[INET_ADDRSTRLEN] {};
-                InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, dns_str, INET_ADDRSTRLEN);
-
-                itf.dns.append(wstr(dns_str)).append(L" ");
-            }
-
-            itf.dns_suff = adapter->DnsSuffix;
-
-            itf.metric = adapter->Ipv4Metric;
-            itf.description = adapter->Description;
-
-            interfaces.push_back(std::move(itf));
-
-
-            adapter = adapter->Next;
-        }
-
-
-
-        std::sort(interfaces.begin(), interfaces.end(),
-                  [](const Interface& a, const Interface& b)
-        {
-            return a.metric < b.metric;
-        });
-
-
-        for (const auto& itf : interfaces)
-        {
-            wcout
-                << L"Name: " << itf.name << L" - " << itf.description  << endl
-                << L"Status: " << (itf.connected ? L"Connected" : L"Disconnected") << endl
-                << L"Metric: " << itf.metric << endl
-                //<< L"Description: " << itf.description << endl
-                << L"IPv4: " << itf.ip << L"/" << itf.subnet << endl
-                << L"Gateway: " << itf.gateway << endl
-                << L"DNS: " << itf.dns << L"(" << itf.dns_suff << L")" << endl
-                << endl;       
-        }
-
 
 #if 0
         // Retrieve the IP interface table
@@ -337,6 +344,24 @@ int wmain(int argc, wchar_t* argv[])
         std::cout << "Metric changed successfully." << std::endl;
 
 #endif // 0
+
+#if 1
+int wmain(int argc, wchar_t* argv[])
+{
+    try
+    {
+        vec<Interface> interfaces = collect_nic_info();
+
+        std::sort(interfaces.begin(), interfaces.end(),
+                  [](const Interface& a, const Interface& b)
+        {
+            return a.metric < b.metric;
+        });
+
+        print_nic_info(interfaces);
+        
+        dump_nic_info(interfaces, L"nic.json");
+
 
         return 0;
 
