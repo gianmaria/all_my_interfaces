@@ -37,6 +37,7 @@
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/prettywriter.h"
+#include "rapidjson/error/en.h"
 using namespace rapidjson;
 
 using u8 = uint8_t;
@@ -257,10 +258,48 @@ void dump_nic_info(const vec<Interface>& interfaces,
     ofs << wsb.GetString();
 }
 
-
-void update_nic_metric()
+void update_nic_metric(const vec<Interface>& interfaces,
+                       wstr_cref filename)
 {
+    std::wifstream inputFile(filename);
 
+    if (not inputFile.is_open()) 
+    {
+        throw std::format(L"[ERROR] Cannot open file '{}' for reading", filename);
+    }
+
+    std::wstring jsonContent((std::istreambuf_iterator<wchar_t>(inputFile)), std::istreambuf_iterator<wchar_t>());
+
+    GenericDocument<UTF16<>> document;
+
+    if (document.Parse(jsonContent.data()).HasParseError()) 
+    {
+        auto why = GetParseError_En(document.GetParseError());
+        throw std::format(L"[ERROR] Cannot parse JSON '{}': {}", filename, UTF8ToWide(why));
+    }
+
+    if (document.IsArray()) 
+    {
+        // Iterate over the array elements
+        for (SizeType i = 0; i < document.Size(); ++i) 
+        {
+            // Check if the array element is a string
+            if (document[i].IsString()) 
+            {
+                std::wcout << L"Element " << i << ": " << document[i].GetString() << std::endl;
+            } 
+            else 
+            {
+                std::wcerr << L"Array element " << i << L" is not a string." << std::endl;
+            }
+        }
+    } 
+    else 
+    {
+        std::cerr << "Root value is not an array." << std::endl;
+    }
+
+    int s = 0;
 }
 
 
@@ -433,7 +472,9 @@ int wmain(int argc, wchar_t* argv[])
 
         print_nic_info(interfaces);
 
-        dump_nic_info(interfaces, L"nic.json");
+        //dump_nic_info(interfaces, L"nic.json");
+
+        update_nic_metric(interfaces, L"nic.json");
 
         return 0;
 
