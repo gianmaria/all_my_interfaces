@@ -31,10 +31,12 @@
 #include <string_view>
 #include <string>
 #include <vector>
+#include <locale>
 
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
+#include "rapidjson/prettywriter.h"
 using namespace rapidjson;
 
 using u8 = uint8_t;
@@ -111,6 +113,50 @@ struct WSA_Startup
     int res {};
 };
 
+
+str wide_to_UTF8(wstr_cref wide_str)
+{
+    int size = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        wide_str.c_str(),
+        -1,
+        nullptr,
+        0,
+        nullptr,
+        nullptr);
+
+    if (size == 0)
+        return "";
+
+    std::string utf8_str(size, '\0');
+
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        wide_str.c_str(),
+        -1,
+        &utf8_str[0],
+        size,
+        nullptr,
+        nullptr);
+
+    return utf8_str;
+}
+
+wstr UTF8ToWide(str_cref utf8String) 
+{
+    int size = MultiByteToWideChar(CP_UTF8, 0, utf8String.data(), -1, nullptr, 0);
+    if (size == 0)
+        return L"";
+
+    std::wstring wideString(size, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8String.data(), -1, &wideString[0], size);
+
+    return wideString;
+}
+
+
 std::wstring last_error_as_string(DWORD last_error)
 {
     auto constexpr buffer_count = 1024;
@@ -171,14 +217,14 @@ void print_nic_info(const vec<Interface>& interfaces)
     for (const auto& itf : interfaces)
     {
         wcout
-            << L"Name: " << itf.name << L" - " << itf.description  << endl
+            << L"Name: " << itf.name << L" - " << itf.description << endl
             << L"Status: " << (itf.connected ? L"Connected" : L"Disconnected") << endl
             << L"Metric: " << itf.metric << endl
             //<< L"Description: " << itf.description << endl
             << L"IPv4: " << itf.ip << L"/" << itf.subnet << endl
             << L"Gateway: " << itf.gateway << endl
             << L"DNS: " << itf.dns << L"(" << itf.dns_suff << L")" << endl
-            << endl;       
+            << endl;
     }
 
 }
@@ -186,17 +232,20 @@ void print_nic_info(const vec<Interface>& interfaces)
 void dump_nic_info(const vec<Interface>& interfaces,
                    wstr_cref filename)
 {
-    std::wstringstream ss;
+    typedef GenericStringBuffer<UTF16<>> WStringBuffer;
+    WStringBuffer wsb;
+    PrettyWriter<WStringBuffer, UTF16<>, UTF16<>> writer(wsb);
     
-    ss << L"[" << endl;
-    
+    writer.StartArray();
+
     for (const auto& itf : interfaces)
     {
-        ss << std::format(L"    \"{}\",", itf.name) << endl;
+        writer.String(itf.name.data());
     }
-    
-    ss << endl << L"    \"dummy, leave it last\"" << endl;
-    ss << L"]" << endl;
+
+    writer.String(L"dummy, leave it last");
+
+    writer.EndArray();
 
     std::wofstream ofs(filename, std::ios::out | std::ios::trunc);
 
@@ -205,7 +254,7 @@ void dump_nic_info(const vec<Interface>& interfaces,
         throw std::format(L"[ERROR] Cannot open file '{}' for writing", filename);
     }
 
-    ofs << ss.str();
+    ofs << wsb.GetString();
 }
 
 
@@ -252,7 +301,7 @@ vec<Interface> collect_nic_info()
 
     IP_ADAPTER_ADDRESSES* adapter = (IP_ADAPTER_ADDRESSES*)mem.get();
 
-    while(adapter != nullptr)
+    while (adapter != nullptr)
     {
         Interface itf {};
 
@@ -312,60 +361,60 @@ vec<Interface> collect_nic_info()
 }
 
 #if 0
-        if (not is_user_admin())
-        {
-            // Prompt the user with a UAC dialog for elevation
-            SHELLEXECUTEINFO shellExecuteInfo {};
-            shellExecuteInfo.cbSize = sizeof(SHELLEXECUTEINFO);
-            shellExecuteInfo.lpVerb = L"runas"; // Request elevation
-            shellExecuteInfo.lpFile = argv[0]; // Path to your application executable
-            shellExecuteInfo.lpParameters = L""; // Optional parameters for your application
-            shellExecuteInfo.nShow = SW_SHOWNORMAL;
+if (not is_user_admin())
+{
+    // Prompt the user with a UAC dialog for elevation
+    SHELLEXECUTEINFO shellExecuteInfo {};
+    shellExecuteInfo.cbSize = sizeof(SHELLEXECUTEINFO);
+    shellExecuteInfo.lpVerb = L"runas"; // Request elevation
+    shellExecuteInfo.lpFile = argv[0]; // Path to your application executable
+    shellExecuteInfo.lpParameters = L""; // Optional parameters for your application
+    shellExecuteInfo.nShow = SW_SHOWNORMAL;
 
-            if (not ShellExecuteExW(&shellExecuteInfo))
-            {
-                wcout << L"[ERROR] cannot start app admin: "
-                    << last_error_as_string(GetLastError())
-                    << endl;
-                return 1;
-            }
+    if (not ShellExecuteExW(&shellExecuteInfo))
+    {
+        wcout << L"[ERROR] cannot start app admin: "
+            << last_error_as_string(GetLastError())
+            << endl;
+        return 1;
+    }
 
-            return 0;
-        }
+    return 0;
+}
 #endif // 0
 
 #if 0
-        // Retrieve the IP interface table
-        MIB_IPINTERFACE_ROW row {};
-        row.Family = AF_INET; // IPv4
-        row.InterfaceLuid = target; // You need to set the appropriate LUID of the interface you want to modify
+// Retrieve the IP interface table
+MIB_IPINTERFACE_ROW row {};
+row.Family = AF_INET; // IPv4
+row.InterfaceLuid = target; // You need to set the appropriate LUID of the interface you want to modify
 
-        result = GetIpInterfaceEntry(&row);
+result = GetIpInterfaceEntry(&row);
 
-        if (result != NO_ERROR)
-        {
-            wcout << L"[ERROR] cannot get interface entry: "
-                << last_error_as_string(result)
-                << endl;
-            return 1;
-        }
+if (result != NO_ERROR)
+{
+    wcout << L"[ERROR] cannot get interface entry: "
+        << last_error_as_string(result)
+        << endl;
+    return 1;
+}
 
-        // Change the metric
-        row.Metric = 10; // Set the desired metric
+// Change the metric
+row.Metric = 10; // Set the desired metric
 
-        // Set the modified IP interface entry
-        result = SetIpInterfaceEntry(&row);
+// Set the modified IP interface entry
+result = SetIpInterfaceEntry(&row);
 
-        if (result != NO_ERROR)
-        {
-            wcout << L"[ERROR] cannot set interface entry: "
-                << last_error_as_string(result)
-                << endl;
+if (result != NO_ERROR)
+{
+    wcout << L"[ERROR] cannot set interface entry: "
+        << last_error_as_string(result)
+        << endl;
 
-            return 1;
-        }
+    return 1;
+}
 
-        std::cout << "Metric changed successfully." << std::endl;
+std::cout << "Metric changed successfully." << std::endl;
 
 #endif // 0
 
@@ -383,7 +432,7 @@ int wmain(int argc, wchar_t* argv[])
         });
 
         print_nic_info(interfaces);
-        
+
         dump_nic_info(interfaces, L"nic.json");
 
         return 0;
