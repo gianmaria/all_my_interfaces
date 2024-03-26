@@ -260,8 +260,7 @@ void dump_nic_info(const vec<Interface>& interfaces,
 }
 
 void update_metric_for_luid(IF_LUID luid,
-                            ULONG new_metric
-)
+                            ULONG new_metric)
 {
     // Retrieve the IP interface table
     MIB_IPINTERFACE_ROW row {};
@@ -334,7 +333,8 @@ void update_nic_metric(const vec<Interface>& interfaces,
 
             if (it == interfaces.end())
             {
-                wcout << std::format(L"[INFO] Cannot find interface '{}', skipping...", target_name);
+                wcout << std::format(L"[WARN] Cannot find interface '{}', maybe has been disabled? skipping...", target_name)
+                    << endl;
                 continue;
             }
 
