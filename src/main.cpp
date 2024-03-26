@@ -1,4 +1,4 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+﻿// This is an open source non-commercial project. Dear PVS-Studio, please check it.
 
 // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 
@@ -7,6 +7,7 @@
 #include <ws2ipdef.h>
 #include <ws2tcpip.h> // for inet_ntop function
 #include <iphlpapi.h>
+#include <windows.h>
 
 #pragma comment(lib, "IPHLPAPI.lib")
 #pragma comment(lib, "Ws2_32.lib")
@@ -32,6 +33,7 @@
 #include <string>
 #include <vector>
 #include <locale>
+#include <print>
 
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
@@ -39,6 +41,8 @@
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/error/en.h"
 using namespace rapidjson;
+
+#include "utf8cpp/utf8.h"
 
 using u8 = uint8_t;
 using u16 = uint16_t;
@@ -470,10 +474,50 @@ if (not is_user_admin())
 
 
 #if 1
+
 int wmain(int argc, wchar_t* argv[])
 {
     try
     {
+
+        SetConsoleOutputCP(CP_UTF8); 
+        SetConsoleCP(CP_UTF8);
+        std::string str = "𨉟呐㗂越 🤑 αβγδ ñ";
+        auto xx = str.size();
+        std::cout << str << std::endl;
+
+
+        std::string utf8String = "こんにちは世界";
+        cout << "valid: " << utf8::is_valid(utf8String) << endl;
+
+        auto dis = utf8::distance(utf8String.begin(), utf8String.end());
+        cout << "distance is: " << dis << endl;
+        // Iterate over characters in the UTF-8 string
+        for (auto it = utf8String.begin(); 
+             it != utf8String.end(); 
+             ) 
+        {
+            uint32_t codepoint = utf8::next(it, utf8String.end());
+            std::cout << "Codepoint: " << codepoint << std::endl;
+        }
+
+        std::u16string utf16line = utf8::utf8to16(utf8String);
+        int s = 0;
+        //std::cout << "\"u\" with two dots on top: \xc3\xbc\n";
+        //std::cout << "chinese glyph for \"world\": \xe5\x80\xbc\n";
+        //std::cout << "smiling emoji: \xf0\x9f\x98\x80\n";
+        //
+        
+        //cout << "σκύλος" << endl;
+        //cout << u8"σκύλος" << endl;
+        //wcout << L"dog is: σκύλος" << endl;
+        //wcout << UTF8ToWide("dog is: σκύλος") << endl;
+        std::println("dog is: {}", "σκύλος");
+        //std::println("Greek: {}; German: {}", "αβγδ", "Übergrößenträger");
+
+
+        return 0;
+
         auto wsa = WSA_Startup(MAKEWORD(2, 2));
         if (wsa.res != NO_ERROR)
         {
@@ -488,11 +532,11 @@ int wmain(int argc, wchar_t* argv[])
             return a.metric < b.metric;
         });
 
-        //print_nic_info(interfaces);
+        print_nic_info(interfaces);
 
         //dump_nic_info(interfaces, L"nic.json");
 
-        update_nic_metric(interfaces, L"nic.json");
+        //update_nic_metric(interfaces, L"nic.json");
 
         return 0;
 
@@ -517,7 +561,98 @@ int wmain(int argc, wchar_t* argv[])
 
 #else
 
+//#define _WINSOCK_DEPRECATED_NO_WARNINGS 1
 
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#include <stdio.h>
+
+#pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "ws2_32.lib")
+
+#define MALLOC(x) HeapAlloc(GetProcessHeap(), 0, (x))
+#define FREE(x) HeapFree(GetProcessHeap(), 0, (x))
+
+/* Note: could also use malloc() and free() */
+
+int __cdecl main()
+{
+
+    int i;
+
+    /* Variables used by GetIpAddrTable */
+    PMIB_IPADDRTABLE pIPAddrTable;
+    DWORD dwSize = 0;
+    DWORD dwRetVal = 0;
+    IN_ADDR IPAddr;
+
+    /* Variables used to return error message */
+    LPVOID lpMsgBuf;
+
+    // Before calling AddIPAddress we use GetIpAddrTable to get
+    // an adapter to which we can add the IP.
+    pIPAddrTable = (MIB_IPADDRTABLE *) MALLOC(sizeof (MIB_IPADDRTABLE));
+
+    if (pIPAddrTable) {
+        // Make an initial call to GetIpAddrTable to get the
+        // necessary size into the dwSize variable
+        if (GetIpAddrTable(pIPAddrTable, &dwSize, 0) ==
+            ERROR_INSUFFICIENT_BUFFER) {
+            FREE(pIPAddrTable);
+            pIPAddrTable = (MIB_IPADDRTABLE *) MALLOC(dwSize);
+
+        }
+        if (pIPAddrTable == NULL) {
+            printf("Memory allocation failed for GetIpAddrTable\n");
+            exit(1);
+        }
+    }
+    // Make a second call to GetIpAddrTable to get the
+    // actual data we want
+    if ( (dwRetVal = GetIpAddrTable( pIPAddrTable, &dwSize, 0 )) != NO_ERROR ) { 
+        printf("GetIpAddrTable failed with error %d\n", dwRetVal);
+        if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, dwRetVal, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),       // Default language
+            (LPTSTR) & lpMsgBuf, 0, NULL)) {
+            printf("\tError: %s", lpMsgBuf);
+            LocalFree(lpMsgBuf);
+        }
+        exit(1);
+    }
+
+    printf("\tNum Entries: %ld\n", pIPAddrTable->dwNumEntries);
+    for (i=0; i < (int) pIPAddrTable->dwNumEntries; i++) {
+        printf("\n\tInterface Index[%d]:\t%ld\n", i, pIPAddrTable->table[i].dwIndex);
+        IPAddr.S_un.S_addr = (u_long) pIPAddrTable->table[i].dwAddr;
+        printf("\tIP Address[%d]:     \t%s\n", i, inet_ntoa(IPAddr) );
+        
+        IPAddr.S_un.S_addr = (u_long) pIPAddrTable->table[i].dwMask;
+        printf("\tSubnet Mask[%d]:    \t%s\n", i, inet_ntoa(IPAddr) );
+
+        IPAddr.S_un.S_addr = (u_long) pIPAddrTable->table[i].dwBCastAddr;
+        printf("\tBroadCast[%d]:      \t%s (%ld%)\n", i, inet_ntoa(IPAddr), pIPAddrTable->table[i].dwBCastAddr);
+        printf("\tReassembly size[%d]:\t%ld\n", i, pIPAddrTable->table[i].dwReasmSize);
+        printf("\tType and State[%d]:", i);
+        if (pIPAddrTable->table[i].wType & MIB_IPADDR_PRIMARY)
+            printf("\tPrimary IP Address");
+        if (pIPAddrTable->table[i].wType & MIB_IPADDR_DYNAMIC)
+            printf("\tDynamic IP Address");
+        if (pIPAddrTable->table[i].wType & MIB_IPADDR_DISCONNECTED)
+            printf("\tAddress is on disconnected interface");
+        if (pIPAddrTable->table[i].wType & MIB_IPADDR_DELETED)
+            printf("\tAddress is being deleted");
+        if (pIPAddrTable->table[i].wType & MIB_IPADDR_TRANSIENT)
+            printf("\tTransient address");
+        printf("\n");
+    }
+
+    if (pIPAddrTable) {
+        FREE(pIPAddrTable);
+        pIPAddrTable = NULL;
+    }
+
+    exit(0);
+}
 
 #endif
 
