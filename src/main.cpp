@@ -32,6 +32,7 @@
 #include <string>
 #include <vector>
 #include <locale>
+#include <cwchar>
 
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
@@ -239,7 +240,7 @@ void dump_nic_info(const vec<Interface>& interfaces,
     typedef GenericStringBuffer<UTF16<>> WStringBuffer;
     WStringBuffer wsb;
     PrettyWriter<WStringBuffer, UTF16<>, UTF16<>> writer(wsb);
-
+    
     writer.StartArray();
 
     for (const auto& itf : interfaces)
@@ -267,14 +268,14 @@ void update_nic_metric_for_luid(IF_LUID luid,
     // Retrieve the IP interface table
     MIB_IPINTERFACE_ROW row {};
     row.Family = AF_INET; // IPv4
-    row.InterfaceLuid = luid; 
+    row.InterfaceLuid = luid;
 
     DWORD result = GetIpInterfaceEntry(&row);
     row.SitePrefixLength = 32; // For an IPv4 address, any value greater than 32 is an illegal value.
 
     if (result != NO_ERROR)
     {
-        throw std::format(L"[ERROR] cannot get interface entry: {}", 
+        throw std::format(L"[ERROR] cannot get interface entry: {}",
                           last_error_as_string(result));
     }
 
@@ -283,10 +284,10 @@ void update_nic_metric_for_luid(IF_LUID luid,
 
     // Set the modified IP interface entry
     result = SetIpInterfaceEntry(&row);
-    
+
     if (result != NO_ERROR)
     {
-        throw std::format(L"[ERROR] Cannot set interface entry: {}", 
+        throw std::format(L"[ERROR] Cannot set interface entry: {}",
                           last_error_as_string(result));
     }
 
@@ -327,8 +328,8 @@ void update_nic_metric(const vec<Interface>& interfaces,
             //std::wcout << L"Element " << i << ": " << document[i].GetString() << std::endl;
             auto target_name = document[i].GetString();
 
-            auto it = std::find_if(interfaces.begin(), interfaces.end(), 
-                                   [&target_name](const Interface& itf) 
+            auto it = std::find_if(interfaces.begin(), interfaces.end(),
+                                   [&target_name](const Interface& itf)
             {
                 return itf.name == target_name;
             });
@@ -342,9 +343,9 @@ void update_nic_metric(const vec<Interface>& interfaces,
 
             ULONG new_metric = (i + 1) * 10;
             update_nic_metric_for_luid(it->luid,
-                                   new_metric);
-            
-            wcout << std::format(L"[INFO] interface '{}' updated succesfully, new metric: {}", 
+                                       new_metric);
+
+            wcout << std::format(L"[INFO] interface '{}' updated succesfully, new metric: {}",
                                  target_name, new_metric) << endl;
         }
 
@@ -355,9 +356,9 @@ void update_nic_metric(const vec<Interface>& interfaces,
 vec<Interface> collect_nic_info()
 {
     ULONG buffer_size = 0;
-    ULONG adapters_flags = 
-        GAA_FLAG_INCLUDE_WINS_INFO | 
-        GAA_FLAG_INCLUDE_PREFIX | 
+    ULONG adapters_flags =
+        GAA_FLAG_INCLUDE_WINS_INFO |
+        GAA_FLAG_INCLUDE_PREFIX |
         GAA_FLAG_INCLUDE_GATEWAYS;
 
     GetAdaptersAddresses(AF_INET, adapters_flags, NULL, NULL, &buffer_size);
@@ -486,12 +487,43 @@ if (not is_user_admin())
 // to set the automatic metric to off use this function: SetIpInterfaceEntry()
 #endif
 
+void print_help(wchar_t* program)
+{
+    wcout << L"Usage: " << program << " [<empty> | dump | load | help]" << endl << endl
 
-#if 1
+        << program << endl
+        << L"   print info on installed nic" << endl << endl
+
+        << program << L" dump file.json " << endl
+        << L"   produce a json file that allows you to reorder the nic priority" << endl << endl
+
+        << program << L" load file.json (require elevation)" << endl
+        << L"   reorder the nic priority based on the order in the json file" << endl << endl
+
+        << program << L" help" << endl
+        << L"   show this help" << endl;
+}
+
 int wmain(int argc, wchar_t* argv[])
 {
     try
     {
+
+#if DEV == 1
+        
+        const wchar_t* fake_argv[] =
+        {
+            L"nic",
+            L"dump",
+            L"all_my_nic.json",
+
+        };
+        
+        argv = (wchar_t**)fake_argv;
+        argc = sizeof(fake_argv) / sizeof(fake_argv[0]);
+
+#endif // DEV eq 1
+
         auto wsa = WSA_Startup(MAKEWORD(2, 2));
 
         if (wsa.res != NO_ERROR)
@@ -507,16 +539,41 @@ int wmain(int argc, wchar_t* argv[])
             return a.metric < b.metric;
         });
 
-        //print_nic_info(interfaces);
+        if (argc == 1)
+        {
+            print_nic_info(interfaces);
+        }
+        else if (argc == 2)
+        {
+            if (std::wcscmp(argv[1], L"help") == 0)
+            {
+                print_help(argv[0]);
+            }
+            else
+            {
+                print_help(argv[0]);
+                return 1;
+            }
+        }
+        else if (argc == 3)
+        {
+            if (std::wcscmp(argv[1], L"dump") == 0)
+            {
+                dump_nic_info(interfaces, argv[2]);
+            }
 
-        //dump_nic_info(interfaces, L"nic.json");
+            //update_nic_metric(interfaces, L"nic.json");
 
-        update_nic_metric(interfaces, L"nic.json");
+        }
+        else
+        {
+            print_nic_info(interfaces);
+            return 1;
+        }
 
         return 0;
-
     }
-    catch (const std::wstring& e)
+    catch (wstr_cref e)
     {
         wcout << e << endl;
     }
@@ -532,11 +589,3 @@ int wmain(int argc, wchar_t* argv[])
     return 1;
 
 }
-
-
-#else
-
-
-
-#endif
-
