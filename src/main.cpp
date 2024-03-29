@@ -92,6 +92,7 @@ struct Interface
     wstr dns;
     wstr dns_suff;
     u32 metric {0};
+    bool automatic_metric {false};
     bool connected {false};
     IF_LUID luid {};
     IF_INDEX index {};
@@ -220,12 +221,13 @@ void print_nic_info(const vec<Interface>& interfaces)
     {
         wcout
             << L"Name: " << itf.name << L" - " << itf.description << endl
-            << L"Metric: " << itf.metric << L" Index: " << itf.index << endl
             << L"Status: " << (itf.connected ? L"Connected" : L"Disconnected") << endl
-            //<< L"Description: " << itf.description << endl
             << L"IPv4: " << itf.ip << L"/" << itf.subnet << endl
             << L"Gateway: " << itf.gateway << endl
             << L"DNS: " << itf.dns << L"(" << itf.dns_suff << L")" << endl
+            << L"Metric: " << itf.metric << L" auto: " << (itf.automatic_metric ? L"Yes" : L"No") << endl
+            << L"Index: " << itf.index << endl
+            //<< L"Description: " << itf.description << endl
             << endl;
     }
 
@@ -259,8 +261,8 @@ void dump_nic_info(const vec<Interface>& interfaces,
     ofs << wsb.GetString();
 }
 
-void update_metric_for_luid(IF_LUID luid,
-                            ULONG new_metric)
+void update_nic_metric_for_luid(IF_LUID luid,
+                                ULONG new_metric)
 {
     // Retrieve the IP interface table
     MIB_IPINTERFACE_ROW row {};
@@ -339,7 +341,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
             }
 
             ULONG new_metric = (i + 1) * 10;
-            update_metric_for_luid(it->luid,
+            update_nic_metric_for_luid(it->luid,
                                    new_metric);
             
             wcout << std::format(L"[INFO] interface '{}' updated succesfully, new metric: {}", 
@@ -389,9 +391,28 @@ vec<Interface> collect_nic_info()
         Interface itf {};
 
         itf.name = wstr(adapter->FriendlyName);
-        itf.luid = adapter->Luid;
+        itf.description = adapter->Description;
         itf.connected = adapter->OperStatus == IfOperStatusUp;
+        itf.dns_suff = adapter->DnsSuffix;
+        itf.metric = adapter->Ipv4Metric;
         itf.index = adapter->IfIndex;
+        itf.luid = adapter->Luid;
+
+        MIB_IPINTERFACE_ROW interface_row {};
+        interface_row.Family = AF_INET;
+        interface_row.InterfaceLuid = adapter->Luid;
+
+        {
+            DWORD result = GetIpInterfaceEntry(&interface_row);
+
+            if (result != NO_ERROR)
+            {
+                throw std::format(L"[ERROR] GetIpInterfaceEntry failed: {}",
+                                  last_error_as_string(result));
+            }
+        }
+
+        itf.automatic_metric = interface_row.UseAutomaticMetric;
 
         // get all the IPs
         for (IP_ADAPTER_UNICAST_ADDRESS_LH* unicast_addr = adapter->FirstUnicastAddress;
@@ -430,13 +451,7 @@ vec<Interface> collect_nic_info()
             itf.dns.append(wstr(dns_str)).append(L" ");
         }
 
-        itf.dns_suff = adapter->DnsSuffix;
-
-        itf.metric = adapter->Ipv4Metric;
-        itf.description = adapter->Description;
-
         interfaces.push_back(std::move(itf));
-
 
         adapter = adapter->Next;
     }
@@ -467,6 +482,9 @@ if (not is_user_admin())
 }
 #endif // 0
 
+#if 0
+// to set the automatic metric to off use this function: SetIpInterfaceEntry()
+#endif
 
 
 #if 1
@@ -475,6 +493,7 @@ int wmain(int argc, wchar_t* argv[])
     try
     {
         auto wsa = WSA_Startup(MAKEWORD(2, 2));
+
         if (wsa.res != NO_ERROR)
         {
             throw std::format(L"[ERROR] WSAStartup failed with code: {}", wsa.res);
