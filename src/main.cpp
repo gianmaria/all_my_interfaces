@@ -361,68 +361,71 @@ void update_nic_metric(const vec<Interface>& interfaces,
 
     if (not document.IsArray())
     {
-        throw std::format(L"[ERROR] Root value is not an array.");
+        throw std::format(L"[ERROR] Root value in json file '{}' is not an array.",
+                          filename);
     }
 
     // Iterate over the array elements
-    for (SizeType i = 0; i < document.Size(); ++i)
+    for (SizeType i = 0; 
+         i < document.Size(); 
+         ++i)
     {
         // Check if the array element is a string
-        if (document[i].IsString())
+        if (not document[i].IsString())
         {
-            //std::wcout << L"Element " << i << ": " << document[i].GetString() << std::endl;
-            auto target_name = document[i].GetString();
-
-            auto it = std::find_if(interfaces.begin(), interfaces.end(),
-                                   [&target_name](const Interface& itf)
-            {
-                return itf.name == target_name;
-            });
-
-            if (it == interfaces.end())
-            {
-                wcout << std::format(L"[WARN] Cannot find interface '{}', maybe has been disabled? skipping...", target_name)
-                    << endl;
-                continue;
-            }
-
-            if (it->automatic_metric)
-            {
-                MIB_IPINTERFACE_ROW row {};
-                row.Family = AF_INET;
-                row.InterfaceLuid = it->luid;
-
-                DWORD res = GetIpInterfaceEntry(&row);
-
-                if (res != NO_ERROR)
-                {
-                    throw std::format(L"[ERROR] Cannot get info on interface '{}' : {}",
-                                      target_name, last_error_as_string(res));
-                }
-
-                row.UseAutomaticMetric = 0;
-                row.SitePrefixLength = 32; // For an IPv4 address, any value greater than 32 is an illegal value.
-
-                res = SetIpInterfaceEntry(&row);
-
-                if (res != NO_ERROR)
-                {
-                    wcout << std::format(L"[WARN] Cannot disable automatic metric for interface '{}' : {}",
-                                         target_name, last_error_as_string(res));
-
-                    continue;
-                }
-            }
-
-            ULONG new_metric = (i + 1) * 10;
-            update_nic_metric_for_luid(target_name,
-                                       it->luid,
-                                       new_metric);
-
-            wcout << std::format(L"[INFO] interface '{}' updated succesfully, new metric: {}",
-                                 target_name, new_metric) << endl;
+            continue;
         }
 
+        auto target_name = document[i].GetString();
+
+        auto it = std::find_if(interfaces.begin(), interfaces.end(),
+                               [&target_name](const Interface& itf)
+        {
+            return itf.name == target_name;
+        });
+
+        if (it == interfaces.end())
+        {
+            wcout << std::format(L"[WARN] Cannot find interface '{}', maybe has been disabled? skipping...", target_name)
+                << endl;
+            continue;
+        }
+
+        if (it->automatic_metric)
+        {
+            MIB_IPINTERFACE_ROW row {};
+            row.Family = AF_INET;
+            row.InterfaceLuid = it->luid;
+
+            DWORD res = GetIpInterfaceEntry(&row);
+
+            if (res != NO_ERROR)
+            {
+                throw std::format(L"[ERROR] Cannot get info on interface '{}' : {}",
+                                  target_name, last_error_as_string(res));
+            }
+
+            row.UseAutomaticMetric = 0;
+            row.SitePrefixLength = 32; // For an IPv4 address, any value greater than 32 is an illegal value.
+
+            res = SetIpInterfaceEntry(&row);
+
+            if (res != NO_ERROR)
+            {
+                wcout << std::format(L"[WARN] Cannot disable automatic metric for interface '{}' : {}",
+                                     target_name, last_error_as_string(res));
+
+                continue;
+            }
+        }
+
+        ULONG new_metric = (i + 1) * 10;
+        update_nic_metric_for_luid(target_name,
+                                   it->luid,
+                                   new_metric);
+
+        wcout << std::format(L"[INFO] interface '{}' updated succesfully, new metric: {}",
+                             target_name, new_metric) << endl;
     }
 }
 
