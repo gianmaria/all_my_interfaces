@@ -218,18 +218,44 @@ bool is_user_admin()
 
 void run_as_administrator(wchar_t* argv[])
 {
+    std::wstringstream ss;
+
+    for (wchar_t** args = argv + 1;
+         *args != nullptr;
+         ++args)
+    {
+        ss << *args << L" ";
+    }
+
+    auto s_argv = ss.str();
+
     // Prompt the user with a UAC dialog for elevation
     SHELLEXECUTEINFO shell_execute_info {};
     shell_execute_info.cbSize = sizeof(SHELLEXECUTEINFO);
-    shell_execute_info.fMask = SEE_MASK_NOASYNC | SEE_MASK_UNICODE;
+    shell_execute_info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_UNICODE | SEE_MASK_NO_CONSOLE;
     shell_execute_info.lpVerb = L"runas"; // Request elevation
     shell_execute_info.lpFile = argv[0]; // Path to your application executable
-    shell_execute_info.lpParameters = L"load all_my_nic.json"; // Optional parameters for your application
+    shell_execute_info.lpParameters = s_argv.c_str(); // Optional parameters for your application
     shell_execute_info.nShow = SW_SHOWNORMAL;
 
-    if (not ShellExecuteExW(&shell_execute_info))
+    if (BOOL res = ShellExecuteExW(&shell_execute_info);
+        not res)
     {
-        throw std::format(L"[ERROR] cannot start app Administrator: {}",
+        throw std::format(L"[ERROR] cannot start app as Administrator: {}",
+                          last_error_as_string(GetLastError()));
+    }
+
+    if (DWORD res = WaitForSingleObject(shell_execute_info.hProcess, INFINITE);
+        res == WAIT_FAILED)
+    {
+        throw std::format(L"[ERROR] WaitForSingleObject failed: {}",
+                          last_error_as_string(GetLastError()));
+    }
+
+    if (BOOL res = CloseHandle(shell_execute_info.hProcess);
+        res == 0)
+    {
+        throw std::format(L"[ERROR] CloseHandle failed: {}",
                           last_error_as_string(GetLastError()));
     }
 }
