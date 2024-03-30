@@ -306,7 +306,8 @@ void dump_nic_info(const vec<Interface>& interfaces,
     ofs << wsb.GetString();
 }
 
-void update_nic_metric_for_luid(IF_LUID luid,
+void update_nic_metric_for_luid(wstr_cref interface_name,
+                                IF_LUID luid,
                                 ULONG new_metric)
 {
     // Retrieve the IP interface table
@@ -331,8 +332,8 @@ void update_nic_metric_for_luid(IF_LUID luid,
 
     if (result != NO_ERROR)
     {
-        throw std::format(L"[ERROR] Cannot set interface entry: {}",
-                          last_error_as_string(result));
+        throw std::format(L"[ERROR] Cannot update metric for interface '{}': {}",
+                          interface_name, last_error_as_string(result));
     }
 
 }
@@ -414,7 +415,8 @@ void update_nic_metric(const vec<Interface>& interfaces,
             }
 
             ULONG new_metric = (i + 1) * 10;
-            update_nic_metric_for_luid(it->luid,
+            update_nic_metric_for_luid(target_name,
+                                       it->luid,
                                        new_metric);
 
             wcout << std::format(L"[INFO] interface '{}' updated succesfully, new metric: {}",
@@ -554,16 +556,16 @@ int wmain(int argc, wchar_t* argv[])
 
 #if DEV == 1
 
-        const wchar_t* fake_argv[] =
+        /*const wchar_t* fake_argv[] =
         {
             L"nic",
             L"load",
             L"all_my_nic.json",
-
+            NULL
         };
 
         argv = (wchar_t**)fake_argv;
-        argc = sizeof(fake_argv) / sizeof(fake_argv[0]);
+        argc = sizeof(fake_argv) / sizeof(fake_argv[0]);*/
 
 #endif // DEV eq 1
 
@@ -606,14 +608,7 @@ int wmain(int argc, wchar_t* argv[])
             }
             else if (std::wcscmp(argv[1], L"load") == 0)
             {
-                if (is_user_admin())
-                {
-                    update_nic_metric(interfaces, argv[2]);
-                }
-                else
-                {
-                    run_as_administrator(argv);
-                }
+                update_nic_metric(interfaces, argv[2]);
             }
             else
             {
