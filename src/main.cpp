@@ -381,8 +381,8 @@ void update_nic_metric(const vec<Interface>& interfaces,
                 if (res != NO_ERROR)
                 {
                     wcout << std::format(L"[WARN] Cannot disable automatic metric for interface '{}' : {}",
-                        target_name, last_error_as_string(res));
-                    
+                                         target_name, last_error_as_string(res));
+
                     continue;
                 }
             }
@@ -449,14 +449,12 @@ vec<Interface> collect_nic_info()
         interface_row.Family = AF_INET;
         interface_row.InterfaceLuid = adapter->Luid;
 
-        {
-            DWORD result = GetIpInterfaceEntry(&interface_row);
+        result = GetIpInterfaceEntry(&interface_row);
 
-            if (result != NO_ERROR)
-            {
-                throw std::format(L"[ERROR] GetIpInterfaceEntry failed: {}",
-                                  last_error_as_string(result));
-            }
+        if (result != NO_ERROR)
+        {
+            throw std::format(L"[ERROR] GetIpInterfaceEntry failed: {}",
+                              last_error_as_string(result));
         }
 
         itf.automatic_metric = interface_row.UseAutomaticMetric;
