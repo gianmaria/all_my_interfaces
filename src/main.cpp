@@ -216,6 +216,24 @@ bool is_user_admin()
     return (is_member > 0);
 }
 
+void run_as_administrator(wchar_t* argv[])
+{
+    // Prompt the user with a UAC dialog for elevation
+    SHELLEXECUTEINFO shell_execute_info {};
+    shell_execute_info.cbSize = sizeof(SHELLEXECUTEINFO);
+    shell_execute_info.fMask = SEE_MASK_NOASYNC | SEE_MASK_UNICODE;
+    shell_execute_info.lpVerb = L"runas"; // Request elevation
+    shell_execute_info.lpFile = argv[0]; // Path to your application executable
+    shell_execute_info.lpParameters = L"load all_my_nic.json"; // Optional parameters for your application
+    shell_execute_info.nShow = SW_SHOWNORMAL;
+
+    if (not ShellExecuteExW(&shell_execute_info))
+    {
+        throw std::format(L"[ERROR] cannot start app Administrator: {}",
+                          last_error_as_string(GetLastError()));
+    }
+}
+
 void print_nic_info(const vec<Interface>& interfaces)
 {
     for (const auto& itf : interfaces)
@@ -240,7 +258,7 @@ void dump_nic_info(const vec<Interface>& interfaces,
     typedef GenericStringBuffer<UTF16<>> WStringBuffer;
     WStringBuffer wsb;
     PrettyWriter<WStringBuffer, UTF16<>, UTF16<>> writer(wsb);
-    
+
     writer.StartArray();
 
     for (const auto& itf : interfaces)
@@ -339,6 +357,34 @@ void update_nic_metric(const vec<Interface>& interfaces,
                 wcout << std::format(L"[WARN] Cannot find interface '{}', maybe has been disabled? skipping...", target_name)
                     << endl;
                 continue;
+            }
+
+            if (it->automatic_metric)
+            {
+                MIB_IPINTERFACE_ROW row {};
+                row.Family = AF_INET;
+                row.InterfaceLuid = it->luid;
+
+                DWORD res = GetIpInterfaceEntry(&row);
+
+                if (res != NO_ERROR)
+                {
+                    throw std::format(L"[ERROR] Cannot get info on interface '{}' : {}",
+                                      target_name, last_error_as_string(res));
+                }
+
+                row.UseAutomaticMetric = 0;
+                row.SitePrefixLength = 32; // For an IPv4 address, any value greater than 32 is an illegal value.
+
+                res = SetIpInterfaceEntry(&row);
+
+                if (res != NO_ERROR)
+                {
+                    wcout << std::format(L"[WARN] Cannot disable automatic metric for interface '{}' : {}",
+                        target_name, last_error_as_string(res));
+                    
+                    continue;
+                }
             }
 
             ULONG new_metric = (i + 1) * 10;
@@ -460,33 +506,6 @@ vec<Interface> collect_nic_info()
     return interfaces;
 }
 
-#if 0
-if (not is_user_admin())
-{
-    // Prompt the user with a UAC dialog for elevation
-    SHELLEXECUTEINFO shellExecuteInfo {};
-    shellExecuteInfo.cbSize = sizeof(SHELLEXECUTEINFO);
-    shellExecuteInfo.lpVerb = L"runas"; // Request elevation
-    shellExecuteInfo.lpFile = argv[0]; // Path to your application executable
-    shellExecuteInfo.lpParameters = L""; // Optional parameters for your application
-    shellExecuteInfo.nShow = SW_SHOWNORMAL;
-
-    if (not ShellExecuteExW(&shellExecuteInfo))
-    {
-        wcout << L"[ERROR] cannot start app admin: "
-            << last_error_as_string(GetLastError())
-            << endl;
-        return 1;
-    }
-
-    return 0;
-}
-#endif // 0
-
-#if 0
-// to set the automatic metric to off use this function: SetIpInterfaceEntry()
-#endif
-
 void print_help(wchar_t* program)
 {
     wcout << L"Usage: " << program << " [<empty> | dump | load | help]" << endl << endl
@@ -497,7 +516,7 @@ void print_help(wchar_t* program)
         << program << L" dump file.json " << endl
         << L"   produce a json file that allows you to reorder the nic priority" << endl << endl
 
-        << program << L" load file.json (require elevation)" << endl
+        << program << L" load file.json (requires elevation)" << endl
         << L"   reorder the nic priority based on the order in the json file" << endl << endl
 
         << program << L" help" << endl
@@ -510,15 +529,15 @@ int wmain(int argc, wchar_t* argv[])
     {
 
 #if DEV == 1
-        
+
         const wchar_t* fake_argv[] =
         {
             L"nic",
-            L"dump",
+            L"load",
             L"all_my_nic.json",
 
         };
-        
+
         argv = (wchar_t**)fake_argv;
         argc = sizeof(fake_argv) / sizeof(fake_argv[0]);
 
@@ -561,9 +580,22 @@ int wmain(int argc, wchar_t* argv[])
             {
                 dump_nic_info(interfaces, argv[2]);
             }
-
-            //update_nic_metric(interfaces, L"nic.json");
-
+            else if (std::wcscmp(argv[1], L"load") == 0)
+            {
+                if (is_user_admin())
+                {
+                    update_nic_metric(interfaces, argv[2]);
+                }
+                else
+                {
+                    run_as_administrator(argv);
+                }
+            }
+            else
+            {
+                print_help(argv[0]);
+                return 1;
+            }
         }
         else
         {
