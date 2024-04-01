@@ -383,7 +383,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
         auto it = std::find_if(interfaces.begin(), interfaces.end(),
                                [&target_name](const Interface& itf)
         {
-            return itf.name == target_name;
+            return std::strcmp(itf.name.c_str(), target_name) == 0;
         });
 
         if (it == interfaces.end())
