@@ -537,7 +537,7 @@ vec<Interface> collect_nic_info()
     return interfaces;
 }
 
-void print_help(wchar_t* program)
+void print_help(const char* program)
 {
     cout << "Usage: " << program << " [<empty> | dump | load | help]" << endl << endl
 
@@ -554,7 +554,7 @@ void print_help(wchar_t* program)
         << "   show this help" << endl;
 }
 
-int wmain(int argc, wchar_t* argv[])
+int main(int argc, const char* argv[])
 {
     try
     {
