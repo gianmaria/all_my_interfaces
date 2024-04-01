@@ -339,24 +339,26 @@ void update_nic_metric_for_luid(str_cref interface_name,
 }
 
 void update_nic_metric(const vec<Interface>& interfaces,
-                       wstr_cref filename)
+                       str_cref filename)
 {
-    std::wifstream inputFile(filename);
+    std::ifstream ifs(filename,
+                      std::ios::in |
+                      std::ios::binary);
 
-    if (not inputFile.is_open())
+    if (not ifs.is_open())
     {
         throw std::format("[ERROR] Cannot open file '{}' for reading", filename);
     }
 
-    std::wstring jsonContent(std::istreambuf_iterator<wchar_t>{inputFile},
-                             std::istreambuf_iterator<wchar_t>{});
+    str json_content(std::istreambuf_iterator<char>{ifs},
+                     std::istreambuf_iterator<char>{});
 
-    GenericDocument<UTF16<>> document;
+    Document document;
 
-    if (document.Parse(jsonContent.data()).HasParseError())
+    if (document.Parse(json_content.data()).HasParseError())
     {
         auto why = GetParseError_En(document.GetParseError());
-        throw std::format("[ERROR] Cannot parse JSON '{}': {}", filename, UTF8ToWide(why));
+        throw std::format("[ERROR] Cannot parse JSON '{}': {}", filename, why);
     }
 
     if (not document.IsArray())
