@@ -267,7 +267,7 @@ void print_nic_info(const vec<Interface>& interfaces)
 {
     for (const auto& itf : interfaces)
     {
-        wcout
+        cout
             << L"Name: " << itf.name << L" - " << itf.description << endl
             << L"Status: " << (itf.connected ? L"Connected" : L"Disconnected") << endl
             << L"IPv4: " << itf.ip << L"/" << itf.subnet << endl
@@ -389,7 +389,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
 
         if (it == interfaces.end())
         {
-            wcout << std::format(L"[WARN] Cannot find interface '{}', maybe has been disabled? skipping...", target_name)
+            cout << std::format(L"[WARN] Cannot find interface '{}', maybe has been disabled? skipping...", target_name)
                 << endl;
             continue;
         }
@@ -415,7 +415,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
 
             if (res != NO_ERROR)
             {
-                wcout << std::format(L"[WARN] Cannot disable automatic metric for interface '{}' : {}",
+                cout << std::format(L"[WARN] Cannot disable automatic metric for interface '{}' : {}",
                                      target_name, last_error_as_string(res));
 
                 continue;
@@ -427,7 +427,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
                                    it->luid,
                                    new_metric);
 
-        wcout << std::format(L"[INFO] interface '{}' updated succesfully, new metric: {}",
+        cout << std::format(L"[INFO] interface '{}' updated succesfully, new metric: {}",
                              target_name, new_metric) << endl;
     }
 }
@@ -540,7 +540,7 @@ vec<Interface> collect_nic_info()
 
 void print_help(wchar_t* program)
 {
-    wcout << L"Usage: " << program << " [<empty> | dump | load | help]" << endl << endl
+    cout << L"Usage: " << program << " [<empty> | dump | load | help]" << endl << endl
 
         << program << endl
         << L"   print info on installed nic" << endl << endl
@@ -632,7 +632,7 @@ int wmain(int argc, wchar_t* argv[])
     }
     catch (wstr_cref e)
     {
-        wcout << e << endl;
+        cout << e << endl;
     }
     catch (str_cref e)
     {
