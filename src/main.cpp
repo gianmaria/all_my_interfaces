@@ -124,14 +124,8 @@ struct WSA_Startup
 str wide_to_UTF8(wstr_cref wide_str)
 {
     int size = WideCharToMultiByte(
-        CP_UTF8,
-        0,
-        wide_str.c_str(),
-        -1,
-        nullptr,
-        0,
-        nullptr,
-        nullptr);
+        CP_UTF8, 0, wide_str.c_str(), -1,
+        nullptr, 0, nullptr, nullptr);
 
     if (size == 0)
         return "";
@@ -139,32 +133,32 @@ str wide_to_UTF8(wstr_cref wide_str)
     auto utf8_str = std::string(size, '\0');
 
     WideCharToMultiByte(
-        CP_UTF8,
-        0,
-        wide_str.c_str(),
-        -1,
-        &utf8_str[0],
-        size,
-        nullptr,
-        nullptr);
+        CP_UTF8, 0, wide_str.c_str(), -1,
+        &utf8_str[0], size, nullptr, nullptr);
 
     return utf8_str;
 }
 
-wstr UTF8ToWide(str_cref utf8String)
+wstr UTF8_to_wide(str_cref utf8_str)
 {
-    int size = MultiByteToWideChar(CP_UTF8, 0, utf8String.data(), -1, nullptr, 0);
+    int size = MultiByteToWideChar(
+        CP_UTF8, 0, utf8_str.data(), 
+        -1, nullptr, 0);
+
     if (size == 0)
-        return "";
+        return L"";
 
-    std::wstring wideString(size, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, utf8String.data(), -1, &wideString[0], size);
+    wstr wide_str(size, L'\0');
 
-    return wideString;
+    MultiByteToWideChar(
+        CP_UTF8, 0, utf8_str.data(), 
+        -1, &wide_str[0], size);
+
+    return wide_str;
 }
 
 
-std::wstring last_error_as_string(DWORD last_error)
+str last_error_as_string(DWORD last_error)
 {
     auto constexpr buffer_count = 1024;
     WCHAR buffer[buffer_count] {};
@@ -180,7 +174,7 @@ std::wstring last_error_as_string(DWORD last_error)
         buffer_count,
         NULL);
 
-    return std::wstring(buffer, size);
+    return wide_to_UTF8(wstr(buffer, size));
 }
 
 bool is_user_admin()
@@ -369,8 +363,8 @@ void update_nic_metric(const vec<Interface>& interfaces,
     }
 
     // Iterate over the array elements
-    for (SizeType i = 0; 
-         i < document.Size(); 
+    for (SizeType i = 0;
+         i < document.Size();
          ++i)
     {
         // Check if the array element is a string
@@ -416,7 +410,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
             if (res != NO_ERROR)
             {
                 cout << std::format("[WARN] Cannot disable automatic metric for interface '{}' : {}",
-                                     target_name, last_error_as_string(res));
+                                    target_name, last_error_as_string(res));
 
                 continue;
             }
@@ -428,7 +422,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
                                    new_metric);
 
         cout << std::format("[INFO] interface '{}' updated succesfully, new metric: {}",
-                             target_name, new_metric) << endl;
+                            target_name, new_metric) << endl;
     }
 }
 
