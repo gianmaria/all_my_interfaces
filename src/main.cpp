@@ -2,7 +2,10 @@
 
 // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 
+
 #include <winsock2.h>
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #include <ws2ipdef.h>
 #include <ws2tcpip.h> // for inet_ntop function
