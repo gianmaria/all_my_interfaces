@@ -63,7 +63,7 @@ using std::vector;
 using std::set;
 using std::map;
 
-using str = std::string;
+using str = std::string; // NOTE: all std::string are utf-8 encoded
 using wstr = std::wstring;
 using str_cref = std::string const&;
 using wstr_cref = std::wstring const&;
@@ -88,13 +88,13 @@ struct Heap_Deleter
 
 struct Interface
 {
-    wstr name;
-    wstr description;
-    wstr ip;
+    str name;
+    str description;
+    str ip;
     u8 subnet {0};
-    wstr gateway;
-    wstr dns;
-    wstr dns_suff;
+    str gateway;
+    str dns;
+    str dns_suff;
     u32 metric {0};
     bool automatic_metric {false};
     bool connected {false};
