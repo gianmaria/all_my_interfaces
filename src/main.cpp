@@ -559,20 +559,21 @@ int main(int argc, const char* argv[])
     try
     {
 
-#if DEV == 1
+#if DEV_BUILD == 1
 
-        /*const wchar_t* fake_argv[] =
+        const char* fake_argv[] =
         {
             "nic",
             "load",
-            "all_my_nic.json",
+            "file.json",
             NULL
         };
 
-        argv = (wchar_t**)fake_argv;
-        argc = sizeof(fake_argv) / sizeof(fake_argv[0]);*/
+        argv = (const char**)fake_argv;
+        argc = sizeof(fake_argv) / sizeof(fake_argv[0]);
+        argc -= 1;
 
-#endif // DEV eq 1
+#endif // DEV_BUILD
 
         auto wsa = WSA_Startup(MAKEWORD(2, 2));
 
