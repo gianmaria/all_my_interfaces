@@ -274,7 +274,6 @@ void print_nic_info(const vec<Interface>& interfaces)
             //<< "Description: " << itf.description << endl
             << endl;
     }
-
 }
 
 void dump_nic_info(const vec<Interface>& interfaces,
