@@ -213,6 +213,7 @@ bool is_user_admin()
     return (is_member > 0);
 }
 
+#if 0 // not used
 void run_as_administrator(wchar_t* argv[])
 {
     std::wstringstream ss;
@@ -230,7 +231,7 @@ void run_as_administrator(wchar_t* argv[])
     SHELLEXECUTEINFO shell_execute_info {};
     shell_execute_info.cbSize = sizeof(SHELLEXECUTEINFO);
     shell_execute_info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_UNICODE | SEE_MASK_NO_CONSOLE;
-    shell_execute_info.lpVerb = "runas"; // Request elevation
+    shell_execute_info.lpVerb = L"runas"; // Request elevation
     shell_execute_info.lpFile = argv[0]; // Path to your application executable
     shell_execute_info.lpParameters = s_argv.c_str(); // Optional parameters for your application
     shell_execute_info.nShow = SW_SHOWNORMAL;
@@ -256,6 +257,7 @@ void run_as_administrator(wchar_t* argv[])
                           last_error_as_string(GetLastError()));
     }
 }
+#endif
 
 void print_nic_info(const vec<Interface>& interfaces)
 {
