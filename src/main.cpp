@@ -3,10 +3,10 @@
 // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 
 
-#include <winsock2.h>
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <winsock2.h>
 #include <ws2ipdef.h>
 #include <ws2tcpip.h> // for inet_ntop function
 #include <iphlpapi.h>
@@ -21,6 +21,7 @@
 #include <exception>
 #include <filesystem>
 #include <format>
+#include <print>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -44,6 +45,8 @@
 #include "rapidjson/error/en.h"
 using namespace rapidjson;
 
+#include "utf8.h"
+
 using u8 = uint8_t;
 using u16 = uint16_t;
 using u32 = uint32_t;
@@ -62,6 +65,7 @@ using std::string_view;
 using std::vector;
 using std::set;
 using std::map;
+using std::println;
 
 using str = std::string; // NOTE: all std::string are utf-8 encoded
 using wstr = std::wstring;
@@ -383,7 +387,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
         auto it = std::find_if(interfaces.begin(), interfaces.end(),
                                [&target_name](const Interface& itf)
         {
-            return std::strcmp(itf.name.c_str(), target_name) == 0;
+            return utf8cmp(itf.name.c_str(), target_name) == 0;
         });
 
         if (it == interfaces.end())
@@ -564,9 +568,9 @@ int main(int argc, const char* argv[])
         const char* fake_argv[] =
         {
             "nic",
-            "load",
-            "file.json",
-            NULL
+            "dump",
+            "nic⚙️⚙️.json",
+            NULL,
         };
 
         argv = (const char**)fake_argv;
@@ -574,6 +578,18 @@ int main(int argc, const char* argv[])
         argc -= 1;
 
 #endif // DEV_BUILD
+
+#if 0
+        for (int i = 0;
+             i < argc;
+             ++i)
+        {
+            println("[{}] '{}'", i + 1, argv[i]);
+        }
+        println("");
+        return 0;
+#endif // 0
+
 
         auto wsa = WSA_Startup(MAKEWORD(2, 2));
 
@@ -596,7 +612,7 @@ int main(int argc, const char* argv[])
         }
         else if (argc == 2)
         {
-            if (std::strcmp(argv[1], "help") == 0)
+            if (utf8cmp(argv[1], "help") == 0)
             {
                 print_help(argv[0]);
             }
@@ -608,11 +624,11 @@ int main(int argc, const char* argv[])
         }
         else if (argc == 3)
         {
-            if (std::strcmp(argv[1], "dump") == 0)
+            if (utf8cmp(argv[1], "dump") == 0)
             {
                 dump_nic_info(interfaces, argv[2]);
             }
-            else if (std::strcmp(argv[1], "load") == 0)
+            else if (utf8cmp(argv[1], "load") == 0)
             {
                 update_nic_metric(interfaces, argv[2]);
             }
