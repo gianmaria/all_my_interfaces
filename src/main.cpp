@@ -470,10 +470,10 @@ vec<Interface> collect_nic_info()
     {
         Interface itf {};
 
-        itf.name = wstr(adapter->FriendlyName);
-        itf.description = adapter->Description;
+        itf.name = to_UTF8(adapter->FriendlyName);
+        itf.description = to_UTF8(adapter->Description);
         itf.connected = adapter->OperStatus == IfOperStatusUp;
-        itf.dns_suff = adapter->DnsSuffix;
+        itf.dns_suff = to_UTF8(adapter->DnsSuffix);
         itf.metric = adapter->Ipv4Metric;
         itf.index = adapter->IfIndex;
         itf.luid = adapter->Luid;
@@ -501,7 +501,7 @@ vec<Interface> collect_nic_info()
             wchar_t ip_str[INET_ADDRSTRLEN] {};
             InetNtopW(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
 
-            itf.ip.append(wstr(ip_str)).append(" ");
+            itf.ip.append(to_UTF8(ip_str)).append(" ");
             itf.subnet = unicast_addr->OnLinkPrefixLength;
         }
 
@@ -514,7 +514,7 @@ vec<Interface> collect_nic_info()
             wchar_t gateway_str[INET_ADDRSTRLEN] {};
             InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, gateway_str, INET_ADDRSTRLEN);
 
-            itf.gateway.append(wstr(gateway_str)).append(" ");
+            itf.gateway.append(to_UTF8(gateway_str)).append(" ");
         }
 
         // get all the DNS
@@ -526,7 +526,7 @@ vec<Interface> collect_nic_info()
             wchar_t dns_str[INET_ADDRSTRLEN] {};
             InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, dns_str, INET_ADDRSTRLEN);
 
-            itf.dns.append(wstr(dns_str)).append(" ");
+            itf.dns.append(to_UTF8(dns_str)).append(" ");
         }
 
         interfaces.push_back(std::move(itf));
