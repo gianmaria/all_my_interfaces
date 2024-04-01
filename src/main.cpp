@@ -277,11 +277,10 @@ void print_nic_info(const vec<Interface>& interfaces)
 }
 
 void dump_nic_info(const vec<Interface>& interfaces,
-                   wstr_cref filename)
+                   str_cref filename)
 {
-    typedef GenericStringBuffer<UTF16<>> WStringBuffer;
-    WStringBuffer wsb;
-    PrettyWriter<WStringBuffer, UTF16<>, UTF16<>> writer(wsb);
+    StringBuffer sb;
+    PrettyWriter writer(sb);
 
     writer.StartArray();
 
@@ -294,14 +293,17 @@ void dump_nic_info(const vec<Interface>& interfaces,
 
     writer.EndArray();
 
-    std::wofstream ofs(filename, std::ios::out | std::ios::trunc);
+    std::ofstream ofs(filename,
+                      std::ios::out |
+                      std::ios::trunc |
+                      std::ios::binary);
 
     if (not ofs.is_open())
     {
         throw std::format("[ERROR] Cannot open file '{}' for writing", filename);
     }
 
-    ofs << wsb.GetString();
+    ofs << sb.GetString();
 }
 
 void update_nic_metric_for_luid(wstr_cref interface_name,
