@@ -596,7 +596,7 @@ int wmain(int argc, wchar_t* argv[])
         }
         else if (argc == 2)
         {
-            if (std::wcscmp(argv[1], "help") == 0)
+            if (std::strcmp(argv[1], "help") == 0)
             {
                 print_help(argv[0]);
             }
@@ -608,11 +608,11 @@ int wmain(int argc, wchar_t* argv[])
         }
         else if (argc == 3)
         {
-            if (std::wcscmp(argv[1], "dump") == 0)
+            if (std::strcmp(argv[1], "dump") == 0)
             {
                 dump_nic_info(interfaces, argv[2]);
             }
-            else if (std::wcscmp(argv[1], "load") == 0)
+            else if (std::strcmp(argv[1], "load") == 0)
             {
                 update_nic_metric(interfaces, argv[2]);
             }
