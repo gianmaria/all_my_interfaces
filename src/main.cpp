@@ -155,7 +155,7 @@ wstr UTF8ToWide(str_cref utf8String)
 {
     int size = MultiByteToWideChar(CP_UTF8, 0, utf8String.data(), -1, nullptr, 0);
     if (size == 0)
-        return L"";
+        return "";
 
     std::wstring wideString(size, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, utf8String.data(), -1, &wideString[0], size);
@@ -199,7 +199,7 @@ bool is_user_admin()
     if (not success)
     {
         FreeSid(AdministratorsGroup);
-        throw std::format(L"[ERROR] Cannot allocate SID: {}",
+        throw std::format("[ERROR] Cannot allocate SID: {}",
                           last_error_as_string(GetLastError()));
     }
 
@@ -210,7 +210,7 @@ bool is_user_admin()
     if (not success)
     {
         FreeSid(AdministratorsGroup);
-        throw std::format(L"[ERROR] CheckTokenMembership fasiled: {}",
+        throw std::format("[ERROR] CheckTokenMembership fasiled: {}",
                           last_error_as_string(GetLastError()));
     }
 
@@ -227,7 +227,7 @@ void run_as_administrator(wchar_t* argv[])
          *args != nullptr;
          ++args)
     {
-        ss << *args << L" ";
+        ss << *args << " ";
     }
 
     auto s_argv = ss.str();
@@ -236,7 +236,7 @@ void run_as_administrator(wchar_t* argv[])
     SHELLEXECUTEINFO shell_execute_info {};
     shell_execute_info.cbSize = sizeof(SHELLEXECUTEINFO);
     shell_execute_info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_UNICODE | SEE_MASK_NO_CONSOLE;
-    shell_execute_info.lpVerb = L"runas"; // Request elevation
+    shell_execute_info.lpVerb = "runas"; // Request elevation
     shell_execute_info.lpFile = argv[0]; // Path to your application executable
     shell_execute_info.lpParameters = s_argv.c_str(); // Optional parameters for your application
     shell_execute_info.nShow = SW_SHOWNORMAL;
@@ -244,21 +244,21 @@ void run_as_administrator(wchar_t* argv[])
     if (BOOL res = ShellExecuteExW(&shell_execute_info);
         not res)
     {
-        throw std::format(L"[ERROR] cannot start app as Administrator: {}",
+        throw std::format("[ERROR] cannot start app as Administrator: {}",
                           last_error_as_string(GetLastError()));
     }
 
     if (DWORD res = WaitForSingleObject(shell_execute_info.hProcess, INFINITE);
         res == WAIT_FAILED)
     {
-        throw std::format(L"[ERROR] WaitForSingleObject failed: {}",
+        throw std::format("[ERROR] WaitForSingleObject failed: {}",
                           last_error_as_string(GetLastError()));
     }
 
     if (BOOL res = CloseHandle(shell_execute_info.hProcess);
         res == 0)
     {
-        throw std::format(L"[ERROR] CloseHandle failed: {}",
+        throw std::format("[ERROR] CloseHandle failed: {}",
                           last_error_as_string(GetLastError()));
     }
 }
@@ -268,14 +268,14 @@ void print_nic_info(const vec<Interface>& interfaces)
     for (const auto& itf : interfaces)
     {
         cout
-            << L"Name: " << itf.name << L" - " << itf.description << endl
-            << L"Status: " << (itf.connected ? L"Connected" : L"Disconnected") << endl
-            << L"IPv4: " << itf.ip << L"/" << itf.subnet << endl
-            << L"Gateway: " << itf.gateway << endl
-            << L"DNS: " << itf.dns << L"(" << itf.dns_suff << L")" << endl
-            << L"Metric: " << itf.metric << L" auto: " << (itf.automatic_metric ? L"Yes" : L"No") << endl
-            << L"Index: " << itf.index << endl
-            //<< L"Description: " << itf.description << endl
+            << "Name: " << itf.name << " - " << itf.description << endl
+            << "Status: " << (itf.connected ? "Connected" : "Disconnected") << endl
+            << "IPv4: " << itf.ip << "/" << itf.subnet << endl
+            << "Gateway: " << itf.gateway << endl
+            << "DNS: " << itf.dns << "(" << itf.dns_suff << ")" << endl
+            << "Metric: " << itf.metric << " auto: " << (itf.automatic_metric ? "Yes" : "No") << endl
+            << "Index: " << itf.index << endl
+            //<< "Description: " << itf.description << endl
             << endl;
     }
 
@@ -295,7 +295,7 @@ void dump_nic_info(const vec<Interface>& interfaces,
         writer.String(itf.name.data());
     }
 
-    writer.String(L"dummy, leave it last");
+    writer.String("dummy, leave it last");
 
     writer.EndArray();
 
@@ -303,7 +303,7 @@ void dump_nic_info(const vec<Interface>& interfaces,
 
     if (not ofs.is_open())
     {
-        throw std::format(L"[ERROR] Cannot open file '{}' for writing", filename);
+        throw std::format("[ERROR] Cannot open file '{}' for writing", filename);
     }
 
     ofs << wsb.GetString();
@@ -323,7 +323,7 @@ void update_nic_metric_for_luid(wstr_cref interface_name,
 
     if (result != NO_ERROR)
     {
-        throw std::format(L"[ERROR] cannot get interface entry: {}",
+        throw std::format("[ERROR] cannot get interface entry: {}",
                           last_error_as_string(result));
     }
 
@@ -335,7 +335,7 @@ void update_nic_metric_for_luid(wstr_cref interface_name,
 
     if (result != NO_ERROR)
     {
-        throw std::format(L"[ERROR] Cannot update metric for interface '{}': {}",
+        throw std::format("[ERROR] Cannot update metric for interface '{}': {}",
                           interface_name, last_error_as_string(result));
     }
 
@@ -348,7 +348,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
 
     if (not inputFile.is_open())
     {
-        throw std::format(L"[ERROR] Cannot open file '{}' for reading", filename);
+        throw std::format("[ERROR] Cannot open file '{}' for reading", filename);
     }
 
     std::wstring jsonContent(std::istreambuf_iterator<wchar_t>{inputFile},
@@ -359,12 +359,12 @@ void update_nic_metric(const vec<Interface>& interfaces,
     if (document.Parse(jsonContent.data()).HasParseError())
     {
         auto why = GetParseError_En(document.GetParseError());
-        throw std::format(L"[ERROR] Cannot parse JSON '{}': {}", filename, UTF8ToWide(why));
+        throw std::format("[ERROR] Cannot parse JSON '{}': {}", filename, UTF8ToWide(why));
     }
 
     if (not document.IsArray())
     {
-        throw std::format(L"[ERROR] Root value in json file '{}' is not an array.",
+        throw std::format("[ERROR] Root value in json file '{}' is not an array.",
                           filename);
     }
 
@@ -389,7 +389,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
 
         if (it == interfaces.end())
         {
-            cout << std::format(L"[WARN] Cannot find interface '{}', maybe has been disabled? skipping...", target_name)
+            cout << std::format("[WARN] Cannot find interface '{}', maybe has been disabled? skipping...", target_name)
                 << endl;
             continue;
         }
@@ -404,7 +404,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
 
             if (res != NO_ERROR)
             {
-                throw std::format(L"[ERROR] Cannot get info on interface '{}' : {}",
+                throw std::format("[ERROR] Cannot get info on interface '{}' : {}",
                                   target_name, last_error_as_string(res));
             }
 
@@ -415,7 +415,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
 
             if (res != NO_ERROR)
             {
-                cout << std::format(L"[WARN] Cannot disable automatic metric for interface '{}' : {}",
+                cout << std::format("[WARN] Cannot disable automatic metric for interface '{}' : {}",
                                      target_name, last_error_as_string(res));
 
                 continue;
@@ -427,7 +427,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
                                    it->luid,
                                    new_metric);
 
-        cout << std::format(L"[INFO] interface '{}' updated succesfully, new metric: {}",
+        cout << std::format("[INFO] interface '{}' updated succesfully, new metric: {}",
                              target_name, new_metric) << endl;
     }
 }
@@ -448,7 +448,7 @@ vec<Interface> collect_nic_info()
 
     if (not mem)
     {
-        throw std::format(L"[ERROR] cannot allocate memory!");
+        throw std::format("[ERROR] cannot allocate memory!");
     }
 
     DWORD result = GetAdaptersAddresses(
@@ -459,7 +459,7 @@ vec<Interface> collect_nic_info()
 
     if (result != NO_ERROR)
     {
-        throw std::format(L"[ERROR] cannot get adapters addresses: {}",
+        throw std::format("[ERROR] cannot get adapters addresses: {}",
                           last_error_as_string(result));
     }
 
@@ -487,7 +487,7 @@ vec<Interface> collect_nic_info()
 
         if (result != NO_ERROR)
         {
-            throw std::format(L"[ERROR] GetIpInterfaceEntry failed: {}",
+            throw std::format("[ERROR] GetIpInterfaceEntry failed: {}",
                               last_error_as_string(result));
         }
 
@@ -502,7 +502,7 @@ vec<Interface> collect_nic_info()
             wchar_t ip_str[INET_ADDRSTRLEN] {};
             InetNtopW(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
 
-            itf.ip.append(wstr(ip_str)).append(L" ");
+            itf.ip.append(wstr(ip_str)).append(" ");
             itf.subnet = unicast_addr->OnLinkPrefixLength;
         }
 
@@ -515,7 +515,7 @@ vec<Interface> collect_nic_info()
             wchar_t gateway_str[INET_ADDRSTRLEN] {};
             InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, gateway_str, INET_ADDRSTRLEN);
 
-            itf.gateway.append(wstr(gateway_str)).append(L" ");
+            itf.gateway.append(wstr(gateway_str)).append(" ");
         }
 
         // get all the DNS
@@ -527,7 +527,7 @@ vec<Interface> collect_nic_info()
             wchar_t dns_str[INET_ADDRSTRLEN] {};
             InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, dns_str, INET_ADDRSTRLEN);
 
-            itf.dns.append(wstr(dns_str)).append(L" ");
+            itf.dns.append(wstr(dns_str)).append(" ");
         }
 
         interfaces.push_back(std::move(itf));
@@ -540,19 +540,19 @@ vec<Interface> collect_nic_info()
 
 void print_help(wchar_t* program)
 {
-    cout << L"Usage: " << program << " [<empty> | dump | load | help]" << endl << endl
+    cout << "Usage: " << program << " [<empty> | dump | load | help]" << endl << endl
 
         << program << endl
-        << L"   print info on installed nic" << endl << endl
+        << "   print info on installed nic" << endl << endl
 
-        << program << L" dump file.json " << endl
-        << L"   produce a json file that allows you to reorder the nic priority" << endl << endl
+        << program << " dump file.json " << endl
+        << "   produce a json file that allows you to reorder the nic priority" << endl << endl
 
-        << program << L" load file.json (requires elevation)" << endl
-        << L"   reorder the nic priority based on the order in the json file" << endl << endl
+        << program << " load file.json (requires elevation)" << endl
+        << "   reorder the nic priority based on the order in the json file" << endl << endl
 
-        << program << L" help" << endl
-        << L"   show this help" << endl;
+        << program << " help" << endl
+        << "   show this help" << endl;
 }
 
 int wmain(int argc, wchar_t* argv[])
@@ -564,9 +564,9 @@ int wmain(int argc, wchar_t* argv[])
 
         /*const wchar_t* fake_argv[] =
         {
-            L"nic",
-            L"load",
-            L"all_my_nic.json",
+            "nic",
+            "load",
+            "all_my_nic.json",
             NULL
         };
 
@@ -579,7 +579,7 @@ int wmain(int argc, wchar_t* argv[])
 
         if (wsa.res != NO_ERROR)
         {
-            throw std::format(L"[ERROR] WSAStartup failed with code: {}", wsa.res);
+            throw std::format("[ERROR] WSAStartup failed with code: {}", wsa.res);
         }
 
         vec<Interface> interfaces = collect_nic_info();
@@ -596,7 +596,7 @@ int wmain(int argc, wchar_t* argv[])
         }
         else if (argc == 2)
         {
-            if (std::wcscmp(argv[1], L"help") == 0)
+            if (std::wcscmp(argv[1], "help") == 0)
             {
                 print_help(argv[0]);
             }
@@ -608,11 +608,11 @@ int wmain(int argc, wchar_t* argv[])
         }
         else if (argc == 3)
         {
-            if (std::wcscmp(argv[1], L"dump") == 0)
+            if (std::wcscmp(argv[1], "dump") == 0)
             {
                 dump_nic_info(interfaces, argv[2]);
             }
-            else if (std::wcscmp(argv[1], L"load") == 0)
+            else if (std::wcscmp(argv[1], "load") == 0)
             {
                 update_nic_metric(interfaces, argv[2]);
             }
