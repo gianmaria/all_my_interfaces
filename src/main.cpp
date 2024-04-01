@@ -91,7 +91,7 @@ struct Interface
     str name;
     str description;
     str ip;
-    u8 subnet {0};
+    u32 subnet {0};
     str gateway;
     str dns;
     str dns_suff;
