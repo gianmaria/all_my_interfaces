@@ -306,7 +306,7 @@ void dump_nic_info(const vec<Interface>& interfaces,
     ofs << sb.GetString();
 }
 
-void update_nic_metric_for_luid(wstr_cref interface_name,
+void update_nic_metric_for_luid(str_cref interface_name,
                                 IF_LUID luid,
                                 ULONG new_metric)
 {
