@@ -121,7 +121,7 @@ struct WSA_Startup
 };
 
 
-str wide_to_UTF8(wstr_cref wide_str)
+str to_UTF8(wstr_cref wide_str)
 {
     int size = WideCharToMultiByte(
         CP_UTF8, 0, wide_str.c_str(), -1,
@@ -139,7 +139,7 @@ str wide_to_UTF8(wstr_cref wide_str)
     return utf8_str;
 }
 
-wstr UTF8_to_wide(str_cref utf8_str)
+wstr to_wide(str_cref utf8_str)
 {
     int size = MultiByteToWideChar(
         CP_UTF8, 0, utf8_str.data(),
@@ -174,7 +174,7 @@ str last_error_as_string(DWORD last_error)
         buffer_count,
         NULL);
 
-    return wide_to_UTF8(wstr(buffer, size));
+    return to_UTF8(wstr(buffer, size));
 }
 
 bool is_user_admin()
