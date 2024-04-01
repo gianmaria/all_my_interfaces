@@ -142,7 +142,7 @@ str wide_to_UTF8(wstr_cref wide_str)
 wstr UTF8_to_wide(str_cref utf8_str)
 {
     int size = MultiByteToWideChar(
-        CP_UTF8, 0, utf8_str.data(), 
+        CP_UTF8, 0, utf8_str.data(),
         -1, nullptr, 0);
 
     if (size == 0)
@@ -151,7 +151,7 @@ wstr UTF8_to_wide(str_cref utf8_str)
     wstr wide_str(size, L'\0');
 
     MultiByteToWideChar(
-        CP_UTF8, 0, utf8_str.data(), 
+        CP_UTF8, 0, utf8_str.data(),
         -1, &wide_str[0], size);
 
     return wide_str;
@@ -628,10 +628,6 @@ int wmain(int argc, wchar_t* argv[])
         }
 
         return 0;
-    }
-    catch (wstr_cref e)
-    {
-        cout << e << endl;
     }
     catch (str_cref e)
     {
