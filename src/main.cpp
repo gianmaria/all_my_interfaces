@@ -95,15 +95,15 @@ struct Interface
     str name;
     str description;
     str ip;
-    u32 subnet {0};
+    u32 subnet{ 0 };
     str gateway;
     str dns;
     str dns_suff;
-    u32 metric {0};
-    bool automatic_metric {false};
-    bool connected {false};
-    IF_LUID luid {};
-    IF_INDEX index {};
+    u32 metric{ 0 };
+    bool automatic_metric{ false };
+    bool connected{ false };
+    IF_LUID luid{};
+    IF_INDEX index{};
 };
 
 struct WSA_Startup
@@ -120,8 +120,8 @@ struct WSA_Startup
         WSACleanup();
     }
 
-    WSADATA wsa_data {};
-    int res {};
+    WSADATA wsa_data{};
+    int res{};
 };
 
 
@@ -165,7 +165,7 @@ wstr to_wide(str_cref utf8_str)
 str last_error_as_string(DWORD last_error)
 {
     auto constexpr buffer_count = 1024;
-    WCHAR buffer[buffer_count] {};
+    WCHAR buffer[buffer_count]{};
 
     DWORD size = FormatMessageW(
         FORMAT_MESSAGE_FROM_SYSTEM |
@@ -184,7 +184,7 @@ str last_error_as_string(DWORD last_error)
 bool is_user_admin()
 {
     SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
-    PSID AdministratorsGroup {};
+    PSID AdministratorsGroup{};
 
     BOOL success = AllocateAndInitializeSid(
         &NtAuthority,
@@ -232,7 +232,7 @@ void run_as_administrator(wchar_t* argv[])
     auto s_argv = ss.str();
 
     // Prompt the user with a UAC dialog for elevation
-    SHELLEXECUTEINFO shell_execute_info {};
+    SHELLEXECUTEINFO shell_execute_info{};
     shell_execute_info.cbSize = sizeof(SHELLEXECUTEINFO);
     shell_execute_info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_UNICODE | SEE_MASK_NO_CONSOLE;
     shell_execute_info.lpVerb = L"runas"; // Request elevation
@@ -315,7 +315,7 @@ void update_nic_metric_for_luid(str_cref interface_name,
                                 ULONG new_metric)
 {
     // Retrieve the IP interface table
-    MIB_IPINTERFACE_ROW row {};
+    MIB_IPINTERFACE_ROW row{};
     row.Family = AF_INET; // IPv4
     row.InterfaceLuid = luid;
 
@@ -399,7 +399,7 @@ void update_nic_metric(const vec<Interface>& interfaces,
 
         if (it->automatic_metric)
         {
-            MIB_IPINTERFACE_ROW row {};
+            MIB_IPINTERFACE_ROW row{};
             row.Family = AF_INET;
             row.InterfaceLuid = it->luid;
 
@@ -472,7 +472,7 @@ vec<Interface> collect_nic_info()
 
     while (adapter != nullptr)
     {
-        Interface itf {};
+        Interface itf{};
 
         itf.name = to_UTF8(adapter->FriendlyName);
         itf.description = to_UTF8(adapter->Description);
@@ -482,7 +482,7 @@ vec<Interface> collect_nic_info()
         itf.index = adapter->IfIndex;
         itf.luid = adapter->Luid;
 
-        MIB_IPINTERFACE_ROW interface_row {};
+        MIB_IPINTERFACE_ROW interface_row{};
         interface_row.Family = AF_INET;
         interface_row.InterfaceLuid = adapter->Luid;
 
@@ -502,7 +502,7 @@ vec<Interface> collect_nic_info()
              unicast_addr = unicast_addr->Next)
         {
             sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(unicast_addr->Address.lpSockaddr);
-            wchar_t ip_str[INET_ADDRSTRLEN] {};
+            wchar_t ip_str[INET_ADDRSTRLEN]{};
             InetNtopW(AF_INET, &(sockaddr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
 
             itf.ip.append(to_UTF8(ip_str)).append(" ");
@@ -515,7 +515,7 @@ vec<Interface> collect_nic_info()
              gateway_addr = gateway_addr->Next)
         {
             sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(gateway_addr->Address.lpSockaddr);
-            wchar_t gateway_str[INET_ADDRSTRLEN] {};
+            wchar_t gateway_str[INET_ADDRSTRLEN]{};
             InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, gateway_str, INET_ADDRSTRLEN);
 
             itf.gateway.append(to_UTF8(gateway_str)).append(" ");
@@ -527,7 +527,7 @@ vec<Interface> collect_nic_info()
              dns_addr = dns_addr->Next)
         {
             sockaddr_in* sockaddr_ipv4 = reinterpret_cast<sockaddr_in*>(dns_addr->Address.lpSockaddr);
-            wchar_t dns_str[INET_ADDRSTRLEN] {};
+            wchar_t dns_str[INET_ADDRSTRLEN]{};
             InetNtopW(AF_INET, &sockaddr_ipv4->sin_addr, dns_str, INET_ADDRSTRLEN);
 
             itf.dns.append(to_UTF8(dns_str)).append(" ");
@@ -541,8 +541,11 @@ vec<Interface> collect_nic_info()
     return interfaces;
 }
 
-void print_help(const char* program)
+void print_help(const char* program_)
 {
+    fs::path program_path = program_;
+    string program = program_path.filename().string();
+
     cout << "Usage: " << program << " [<empty> | dump | load | help]" << endl << endl
 
         << program << endl
